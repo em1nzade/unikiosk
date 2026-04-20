@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { useKioskData } from '../shared/useKioskData';
 import { useI18n, type Lang } from '../shared/i18n';
-import type { Announcement, Faculty, Event as KioskEvent, CafeteriaCategory, InfoContent, KioskSettings } from '../shared/types';
+import type { Announcement, Faculty, Schedule, ScheduleCell, Event as KioskEvent, CafeteriaCategory, InfoContent, KioskSettings } from '../shared/types';
 
 const LOCALE_MAP: Record<Lang, string> = { az: 'az-AZ', en: 'en-GB', ru: 'ru-RU' };
 const LANG_LABELS: Record<Lang, string> = { az: 'AZ', en: 'EN', ru: 'RU' };
@@ -98,7 +98,10 @@ const WeatherIcon = ({ code, size = 24, className = '' }: { code: number; size?:
 };
 
 // --- Faculty Browser View ---
-const FacultyBrowserView = ({ faculties }: { faculties: Faculty[] }) => {
+const KIOSK_DAY_NAMES = ['I', 'II', 'III', 'IV', 'V'];
+const KIOSK_TIME_SLOTS = ['08⁰⁰-09²⁰', '09³⁵-10⁵⁵', '11¹⁰-12³⁰'];
+
+const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; schedules: Schedule[] }) => {
   const { t } = useI18n();
   const [selectedFacultyId, setSelectedFacultyId] = useState<number | null>(null);
   const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null);
@@ -141,8 +144,10 @@ const FacultyBrowserView = ({ faculties }: { faculties: Faculty[] }) => {
     );
   }
 
-  // Level 2: Department list
+  // Level 2: Department list (with schedule link at top)
   if (!department) {
+    const facultySchedules = schedules.filter(s => s.faculty_id === faculty.id);
+    const hasSchedules = facultySchedules.length > 0;
     return (
       <div className="flex-1 pt-40 pb-12 px-12 overflow-y-auto">
         <div className="max-w-6xl mx-auto">
@@ -154,10 +159,28 @@ const FacultyBrowserView = ({ faculties }: { faculties: Faculty[] }) => {
             <h3 className="text-4xl font-bold text-uni-blue mb-2">{faculty.name}</h3>
             <p className="text-xl text-gray-500">{t('faculty.selectDept') as string}</p>
           </motion.div>
+
+          {/* Schedule card */}
+          {hasSchedules && (
+            <motion.button initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+              whileTap={{ scale: 0.98 }} onClick={() => { setContentTab('schedule'); setCourseYear(1); }}
+              className="w-full bg-gradient-to-r from-uni-blue to-blue-800 rounded-[2rem] p-8 shadow-lg mb-8 text-left flex items-center gap-6 group hover:shadow-xl transition-all">
+              <div className="w-20 h-20 bg-white/20 rounded-2xl flex items-center justify-center shrink-0">
+                <Clock size={40} className="text-white" />
+              </div>
+              <div className="flex-1">
+                <h4 className="text-3xl font-bold text-white mb-1">{t('dept.schedules') as string}</h4>
+                <p className="text-lg text-blue-200">{facultySchedules.length} {t('dept.courseYear') as string}</p>
+              </div>
+              <ChevronRight size={36} className="text-white/50 group-hover:text-white transition-colors shrink-0" />
+            </motion.button>
+          )}
+
+          {/* Departments */}
           <div className="grid grid-cols-1 gap-5">
             {faculty.departments.map((d, i) => (
-              <motion.button key={d.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.08 }}
-                whileTap={{ scale: 0.99 }} onClick={() => { setSelectedDeptId(d.id); setContentTab('schedule'); setCourseYear(1); }}
+              <motion.button key={d.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: (i + 1) * 0.08 }}
+                whileTap={{ scale: 0.99 }} onClick={() => { setSelectedDeptId(d.id); setContentTab('announcement'); }}
                 className="bg-white rounded-[2rem] p-8 shadow-sm border border-gray-100 hover:shadow-lg transition-all text-left flex items-center gap-6 group">
                 <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 shrink-0 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
                   <BookOpen size={32} />
@@ -174,15 +197,99 @@ const FacultyBrowserView = ({ faculties }: { faculties: Faculty[] }) => {
     );
   }
 
-  // Level 3: Department content
-  const tabs: { key: 'schedule' | 'announcement' | 'exam'; label: string; icon: React.ReactNode }[] = [
-    { key: 'schedule', label: t('dept.schedules') as string, icon: <Clock size={24} /> },
+  // Level 3a: Faculty schedule grid view
+  if (contentTab === 'schedule' && !selectedDeptId) {
+    const facultySchedules = schedules.filter(s => s.faculty_id === faculty.id);
+    const schedule = facultySchedules.find(s => s.course_year === courseYear && s.sector === 'az');
+    return (
+      <div className="flex-1 pt-40 pb-12 px-8 overflow-y-auto">
+        <div className="max-w-[95vw] mx-auto">
+          <button onClick={() => { setContentTab('announcement'); }}
+            className="flex items-center gap-3 text-xl font-bold text-uni-blue bg-white px-6 py-3 rounded-full shadow-sm mb-6 hover:bg-gray-50 transition-colors w-fit border border-gray-100">
+            <ChevronLeft size={24} /> {faculty.name}
+          </button>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
+            <h3 className="text-4xl font-bold text-uni-blue mb-2">{t('dept.schedules') as string}</h3>
+          </motion.div>
+
+          {/* Course year selector */}
+          <div className="flex gap-3 mb-6">
+            {[1, 2, 3, 4].map(y => {
+              const exists = facultySchedules.some(s => s.course_year === y);
+              return (
+                <button key={y} onClick={() => setCourseYear(y)}
+                  className={`w-16 h-16 rounded-2xl text-2xl font-bold transition-all ${courseYear === y ? 'bg-uni-gold text-white shadow-lg' : exists ? 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50' : 'bg-gray-100 text-gray-300 border border-gray-100 cursor-default'}`}>
+                  {y}
+                </button>
+              );
+            })}
+            <span className="flex items-center text-xl text-gray-400 ml-2">{t('dept.courseYear') as string}</span>
+          </div>
+
+          {/* Schedule grid */}
+          {schedule && schedule.groups.length > 0 ? (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-uni-blue">
+                    <th className="px-4 py-4 text-base font-bold text-white border-r border-blue-700 sticky left-0 bg-uni-blue z-10 w-16">{t('schedule.day') as string || 'Gün'}</th>
+                    <th className="px-3 py-4 text-sm font-bold text-white border-r border-blue-700 sticky left-16 bg-uni-blue z-10 w-28">{t('schedule.time') as string || 'Saat'}</th>
+                    {schedule.groups.map((g, i) => (
+                      <th key={i} className="px-3 py-4 text-sm font-bold text-white border-r border-blue-700 min-w-[160px]">{g}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {KIOSK_DAY_NAMES.map((dayName, dayIdx) =>
+                    KIOSK_TIME_SLOTS.map((slot, slotIdx) => (
+                      <tr key={`${dayIdx}_${slotIdx}`} className={`${slotIdx === 0 ? 'border-t-2 border-uni-blue/30' : 'border-t border-gray-100'}`}>
+                        {slotIdx === 0 && (
+                          <td rowSpan={3} className="px-3 py-2 text-center font-black text-2xl text-uni-blue border-r border-gray-200 sticky left-0 bg-white z-10 align-middle">{dayName}</td>
+                        )}
+                        <td className="px-2 py-3 text-sm font-semibold text-gray-600 border-r border-gray-200 sticky left-16 bg-white z-10 whitespace-nowrap">{slot}</td>
+                        {schedule.groups.map((_, gIdx) => {
+                          const key = `${dayIdx + 1}_${slotIdx + 1}_${gIdx}`;
+                          const cell = schedule.cells[key];
+                          return (
+                            <td key={gIdx} className="px-2 py-2 border-r border-gray-100 align-top">
+                              {cell ? (
+                                <div>
+                                  <p className="text-sm font-bold text-gray-800 leading-snug whitespace-pre-line">{cell.s}</p>
+                                  <p className="text-xs text-gray-500 leading-snug mt-1 whitespace-pre-line">{cell.t}</p>
+                                  {cell.r && <p className="text-xs text-uni-blue font-bold mt-0.5 whitespace-pre-line">Aud: {cell.r}</p>}
+                                </div>
+                              ) : null}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </motion.div>
+          ) : (
+            <div className="bg-white rounded-[3rem] p-16 text-center shadow-sm border border-gray-100 flex flex-col items-center mt-6">
+              <div className="w-24 h-24 bg-gray-50 rounded-3xl flex items-center justify-center mb-8">
+                <Search size={48} className="text-gray-300" />
+              </div>
+              <h3 className="text-3xl font-bold text-uni-blue mb-3">{t('dept.empty') as string}</h3>
+              <p className="text-xl text-gray-500">{t('dept.empty.desc') as string}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Level 3b: Department content (announcements, exams)
+  const tabs: { key: 'announcement' | 'exam'; label: string; icon: React.ReactNode }[] = [
     { key: 'announcement', label: t('dept.announcements') as string, icon: <Megaphone size={24} /> },
     { key: 'exam', label: t('dept.exams') as string, icon: <FileText size={24} /> },
   ];
 
   const contentForTab = department.content.filter(c => c.type === contentTab);
-  const scheduleContent = contentTab === 'schedule' ? contentForTab.filter(c => c.course_year === courseYear) : contentForTab;
 
   return (
     <div className="flex-1 pt-40 pb-12 px-12 overflow-y-auto">
@@ -198,30 +305,17 @@ const FacultyBrowserView = ({ faculties }: { faculties: Faculty[] }) => {
         {/* Content type tabs */}
         <div className="flex gap-3 mb-8">
           {tabs.map(tb => (
-            <button key={tb.key} onClick={() => { setContentTab(tb.key); setCourseYear(1); }}
+            <button key={tb.key} onClick={() => { setContentTab(tb.key); }}
               className={`flex items-center gap-3 px-8 py-4 rounded-full text-xl font-bold transition-all ${contentTab === tb.key ? 'bg-uni-blue text-white shadow-lg' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}>
               {tb.icon} {tb.label}
             </button>
           ))}
         </div>
 
-        {/* Course year selector for schedules */}
-        {contentTab === 'schedule' && (
-          <div className="flex gap-3 mb-8">
-            {[1, 2, 3, 4].map(y => (
-              <button key={y} onClick={() => setCourseYear(y)}
-                className={`w-16 h-16 rounded-2xl text-2xl font-bold transition-all ${courseYear === y ? 'bg-uni-gold text-white shadow-lg' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}>
-                {y}
-              </button>
-            ))}
-            <span className="flex items-center text-xl text-gray-400 ml-2">{t('dept.courseYear') as string}</span>
-          </div>
-        )}
-
         {/* Content display */}
-        {scheduleContent.length > 0 ? (
+        {contentForTab.length > 0 ? (
           <div className="space-y-6">
-            {scheduleContent.map((item, i) => (
+            {contentForTab.map((item, i) => (
               <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}
                 className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow">
                 {item.image_url && (
@@ -824,7 +918,7 @@ export default function KioskApp() {
   const renderView = () => {
     switch (currentView) {
       case 'map': return <MapView />;
-      case 'faculties': return <FacultyBrowserView faculties={data.faculties} />;
+      case 'faculties': return <FacultyBrowserView faculties={data.faculties} schedules={data.schedules || []} />;
       case 'events': return <EventsView events={data.events} />;
       case 'cafeteria': return <CafeteriaView menu={data.cafeteria} />;
       case 'announcements': return <AnnouncementsView announcements={data.announcements} />;

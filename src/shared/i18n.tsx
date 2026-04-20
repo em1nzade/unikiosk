@@ -42,6 +42,8 @@ const translations = {
   'dept.courseYear': { az: '-ci kurs', en: 'year', ru: 'курс' },
   'dept.empty': { az: 'Məlumat yoxdur', en: 'No content', ru: 'Нет данных' },
   'dept.empty.desc': { az: 'Bu bölmə üçün hələ məlumat əlavə edilməyib.', en: 'No content has been added for this section yet.', ru: 'Для этого раздела пока нет данных.' },
+  'schedule.day': { az: 'Gün', en: 'Day', ru: 'День' },
+  'schedule.time': { az: 'Saat', en: 'Time', ru: 'Время' },
 
   // Events detail
   'events.about': { az: 'Tədbir haqqında', en: 'About the event', ru: 'О мероприятии' },

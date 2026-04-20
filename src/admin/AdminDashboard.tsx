@@ -539,6 +539,274 @@ function AnnouncementsManager({ items, token, onRefresh }: { items: Announcement
   );
 }
 
+// ─── Schedule Editor (Excel-like) ─────────────────────────
+const DAY_NAMES = ['I', 'II', 'III', 'IV', 'V'];
+const TIME_SLOTS = ['08:00-09:20', '09:35-10:55', '11:10-12:30'];
+const SECTOR_OPTIONS = [{ value: 'az', label: 'AZ' }, { value: 'ru', label: 'RU' }, { value: 'en', label: 'EN' }];
+
+function ScheduleEditor({ faculties, token }: { faculties: Faculty[]; token: string }) {
+  const [facultyId, setFacultyId] = useState<number>(faculties[0]?.id ?? 0);
+  const [courseYear, setCourseYear] = useState(1);
+  const [sector, setSector] = useState('az');
+  const [groups, setGroups] = useState<string[]>([]);
+  const [cells, setCells] = useState<Record<string, ScheduleCell>>({});
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [editingCell, setEditingCell] = useState<string | null>(null);
+  const [cellDraft, setCellDraft] = useState<ScheduleCell>({ s: '', t: '', r: '' });
+  const [addingGroup, setAddingGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [savedMsg, setSavedMsg] = useState(false);
+
+  const loadSchedule = useCallback(async () => {
+    if (!facultyId) return;
+    setLoading(true);
+    try {
+      const all = await adminFetch<Schedule[]>(`/exams?entity=schedule&faculty_id=${facultyId}`, token);
+      const found = all.find(s => s.course_year === courseYear && s.sector === sector);
+      if (found) {
+        setGroups(found.groups || []);
+        setCells(found.cells || {});
+      } else {
+        setGroups([]);
+        setCells({});
+      }
+      setDirty(false);
+    } catch { setGroups([]); setCells({}); }
+    setLoading(false);
+  }, [facultyId, courseYear, sector, token]);
+
+  useEffect(() => { loadSchedule(); }, [loadSchedule]);
+
+  const saveSchedule = async () => {
+    setSaving(true);
+    try {
+      await adminFetch('/exams?entity=schedule', token, {
+        method: 'PUT',
+        body: JSON.stringify({ faculty_id: facultyId, course_year: courseYear, sector, groups, cells }),
+      });
+      setDirty(false);
+      setSavedMsg(true);
+      setTimeout(() => setSavedMsg(false), 2000);
+    } finally { setSaving(false); }
+  };
+
+  const updateCell = (key: string, field: keyof ScheduleCell, value: string) => {
+    setCells(prev => {
+      const existing = prev[key] || { s: '', t: '', r: '' };
+      const updated = { ...existing, [field]: value };
+      if (!updated.s && !updated.t && !updated.r) {
+        const { [key]: _, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [key]: updated };
+    });
+    setDirty(true);
+  };
+
+  const clearCell = (key: string) => {
+    setCells(prev => {
+      const { [key]: _, ...rest } = prev;
+      return rest;
+    });
+    setDirty(true);
+    setEditingCell(null);
+  };
+
+  const addGroup = () => {
+    if (!newGroupName.trim() || groups.includes(newGroupName.trim())) return;
+    setGroups(prev => [...prev, newGroupName.trim()]);
+    setNewGroupName('');
+    setAddingGroup(false);
+    setDirty(true);
+  };
+
+  const removeGroup = (idx: number) => {
+    setGroups(prev => prev.filter((_, i) => i !== idx));
+    // Remove all cells for this group index and re-index higher groups
+    setCells(prev => {
+      const next: Record<string, ScheduleCell> = {};
+      for (const [key, val] of Object.entries(prev)) {
+        const [d, t, g] = key.split('_').map(Number);
+        if (g === idx) continue;
+        const newG = g > idx ? g - 1 : g;
+        next[`${d}_${t}_${newG}`] = val;
+      }
+      return next;
+    });
+    setDirty(true);
+  };
+
+  const startEdit = (key: string) => {
+    setEditingCell(key);
+    setCellDraft(cells[key] || { s: '', t: '', r: '' });
+  };
+
+  const commitEdit = () => {
+    if (!editingCell) return;
+    if (!cellDraft.s && !cellDraft.t && !cellDraft.r) {
+      clearCell(editingCell);
+    } else {
+      setCells(prev => ({ ...prev, [editingCell!]: { ...cellDraft } }));
+      setDirty(true);
+    }
+    setEditingCell(null);
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold text-gray-900">Dərs Cədvəlləri</h2>
+        <div className="flex items-center gap-3">
+          {savedMsg && <span className="text-green-600 font-medium text-sm flex items-center gap-1"><Check size={16} /> Yadda saxlanıldı</span>}
+          {dirty && (
+            <button onClick={saveSchedule} disabled={saving}
+              className="flex items-center gap-2 px-5 py-2.5 bg-uni-blue text-white rounded-xl font-medium hover:bg-blue-900 disabled:opacity-50">
+              {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Yadda saxla
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Selectors */}
+      <div className="flex gap-3 mb-6 flex-wrap">
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Fakültə</label>
+          <select value={facultyId} onChange={e => setFacultyId(Number(e.target.value))}
+            className="px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:border-uni-blue bg-white text-sm font-medium min-w-[240px]">
+            {faculties.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Kurs</label>
+          <div className="flex gap-1">
+            {[1, 2, 3, 4].map(y => (
+              <button key={y} onClick={() => setCourseYear(y)}
+                className={`w-10 h-10 rounded-lg text-sm font-bold transition-all ${courseYear === y ? 'bg-uni-blue text-white shadow' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}>
+                {y}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Sektor</label>
+          <div className="flex gap-1">
+            {SECTOR_OPTIONS.map(s => (
+              <button key={s.value} onClick={() => setSector(s.value)}
+                className={`px-4 h-10 rounded-lg text-sm font-bold transition-all ${sector === s.value ? 'bg-uni-gold text-white shadow' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}>
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center h-40"><Loader2 size={28} className="animate-spin text-uni-blue" /></div>
+      ) : (
+        <>
+          {/* Group management */}
+          <div className="flex items-center gap-2 mb-4 flex-wrap">
+            <span className="text-sm font-medium text-gray-500">Qruplar:</span>
+            {groups.map((g, i) => (
+              <span key={i} className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium">
+                {g}
+                <button onClick={() => removeGroup(i)} className="ml-1 text-blue-400 hover:text-red-500" title="Qrupu sil"><X size={14} /></button>
+              </span>
+            ))}
+            {addingGroup ? (
+              <div className="inline-flex items-center gap-1">
+                <input autoFocus value={newGroupName} onChange={e => setNewGroupName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addGroup(); if (e.key === 'Escape') setAddingGroup(false); }}
+                  className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm w-24 outline-none focus:border-uni-blue" placeholder="Qrup..." />
+                <button onClick={addGroup} className="p-1.5 bg-uni-blue text-white rounded-lg"><Check size={14} /></button>
+                <button onClick={() => setAddingGroup(false)} className="p-1.5 text-gray-400 hover:text-gray-600"><X size={14} /></button>
+              </div>
+            ) : (
+              <button onClick={() => setAddingGroup(true)} className="inline-flex items-center gap-1 px-3 py-1.5 border border-dashed border-gray-300 text-gray-500 rounded-lg text-sm hover:border-uni-blue hover:text-uni-blue">
+                <Plus size={14} /> Qrup əlavə et
+              </button>
+            )}
+          </div>
+
+          {/* Schedule grid */}
+          {groups.length === 0 ? (
+            <div className="bg-white rounded-2xl p-12 text-center border border-gray-100">
+              <Table2 size={48} className="text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500 font-medium">Qrup əlavə edərək cədvəli yaradın</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-gray-100 overflow-x-auto">
+              <table className="w-full border-collapse min-w-[800px]">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th className="px-3 py-3 text-xs font-bold text-gray-500 border-b border-r border-gray-200 sticky left-0 bg-gray-50 z-10 w-20">Gün</th>
+                    <th className="px-3 py-3 text-xs font-bold text-gray-500 border-b border-r border-gray-200 sticky left-20 bg-gray-50 z-10 w-28">Saat</th>
+                    {groups.map((g, i) => (
+                      <th key={i} className="px-2 py-3 text-xs font-bold text-blue-700 border-b border-r border-gray-200 min-w-[140px] whitespace-nowrap">{g}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {DAY_NAMES.map((dayName, dayIdx) =>
+                    TIME_SLOTS.map((slot, slotIdx) => (
+                      <tr key={`${dayIdx}_${slotIdx}`} className={`${slotIdx === 0 ? 'border-t-2 border-gray-300' : 'border-t border-gray-100'} hover:bg-blue-50/30`}>
+                        {slotIdx === 0 && (
+                          <td rowSpan={3} className="px-3 py-2 text-center font-black text-lg text-uni-blue border-r border-gray-200 sticky left-0 bg-white z-10 align-middle">{dayName}</td>
+                        )}
+                        <td className="px-2 py-2 text-xs font-medium text-gray-500 border-r border-gray-200 sticky left-20 bg-white z-10 whitespace-nowrap">{slot}</td>
+                        {groups.map((_, gIdx) => {
+                          const key = `${dayIdx + 1}_${slotIdx + 1}_${gIdx}`;
+                          const cell = cells[key];
+                          const isEditing = editingCell === key;
+                          return (
+                            <td key={gIdx} className={`px-1 py-1 border-r border-gray-100 align-top transition-colors ${isEditing ? 'bg-blue-50 ring-2 ring-uni-blue ring-inset' : 'cursor-pointer hover:bg-yellow-50'}`}
+                              onClick={() => !isEditing && startEdit(key)}>
+                              {isEditing ? (
+                                <div className="space-y-1 p-1" onClick={e => e.stopPropagation()}>
+                                  <textarea value={cellDraft.s} onChange={e => setCellDraft(p => ({ ...p, s: e.target.value }))}
+                                    placeholder="Fənn" rows={2}
+                                    className="w-full px-2 py-1 text-xs border border-gray-200 rounded outline-none focus:border-uni-blue resize-none" />
+                                  <input value={cellDraft.t} onChange={e => setCellDraft(p => ({ ...p, t: e.target.value }))}
+                                    placeholder="Müəllim"
+                                    className="w-full px-2 py-1 text-xs border border-gray-200 rounded outline-none focus:border-uni-blue" />
+                                  <input value={cellDraft.r} onChange={e => setCellDraft(p => ({ ...p, r: e.target.value }))}
+                                    placeholder="Aud."
+                                    className="w-full px-2 py-1 text-xs border border-gray-200 rounded outline-none focus:border-uni-blue" />
+                                  <div className="flex gap-1 justify-end">
+                                    <button onClick={() => clearCell(key)} className="px-2 py-0.5 text-[10px] text-red-500 hover:bg-red-50 rounded" title="Təmizlə"><Trash2 size={12} /></button>
+                                    <button onClick={() => setEditingCell(null)} className="px-2 py-0.5 text-[10px] text-gray-400 hover:bg-gray-100 rounded"><X size={12} /></button>
+                                    <button onClick={commitEdit} className="px-2 py-0.5 text-[10px] bg-uni-blue text-white rounded"><Check size={12} /></button>
+                                  </div>
+                                </div>
+                              ) : cell ? (
+                                <div className="p-1 min-h-[40px]">
+                                  <p className="text-[11px] font-semibold text-gray-800 leading-tight whitespace-pre-line">{cell.s}</p>
+                                  <p className="text-[10px] text-gray-500 leading-tight mt-0.5 whitespace-pre-line">{cell.t}</p>
+                                  <p className="text-[10px] text-blue-600 font-bold whitespace-pre-line">{cell.r && `Aud: ${cell.r}`}</p>
+                                </div>
+                              ) : (
+                                <div className="min-h-[40px] flex items-center justify-center">
+                                  <span className="text-gray-200 text-xs">+</span>
+                                </div>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Faculty Manager ──────────────────────────────────────
 function FacultyManager({ faculties, token, onRefresh }: { faculties: Faculty[]; token: string; onRefresh: () => void }) {
   const [selectedFacultyId, setSelectedFacultyId] = useState<number | null>(null);
