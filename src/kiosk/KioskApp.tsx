@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Map, CalendarDays, GraduationCap, Info, Clock, ChevronLeft, ChevronRight,
-  Home, Search, ArrowRight, Bell, Coffee, Globe, Building2, BookOpen, Megaphone, FileText
+  Home, Search, ArrowRight, Bell, Coffee, Globe, Building2, BookOpen, Megaphone, FileText,
+  MapPin
 } from 'lucide-react';
 import { useKioskData } from '../shared/useKioskData';
 import { useI18n, type Lang } from '../shared/i18n';
@@ -10,6 +11,76 @@ import type { Announcement, Faculty, Event as KioskEvent, CafeteriaCategory, Inf
 
 const LOCALE_MAP: Record<Lang, string> = { az: 'az-AZ', en: 'en-GB', ru: 'ru-RU' };
 const LANG_LABELS: Record<Lang, string> = { az: 'AZ', en: 'EN', ru: 'RU' };
+
+// --- Baku Weather ---
+type WeatherData = { temp: number; code: number } | null;
+
+const useBakuWeather = () => {
+  const [weather, setWeather] = useState<WeatherData>(null);
+  useEffect(() => {
+    const fetchWeather = () => {
+      fetch('https://api.open-meteo.com/v1/forecast?latitude=40.4093&longitude=49.8671&current=temperature_2m,weather_code&timezone=Asia/Baku')
+        .then(r => r.json())
+        .then(d => { if (d.current) setWeather({ temp: Math.round(d.current.temperature_2m), code: d.current.weather_code }); })
+        .catch(() => {});
+    };
+    fetchWeather();
+    const iv = setInterval(fetchWeather, 10 * 60 * 1000);
+    return () => clearInterval(iv);
+  }, []);
+  return weather;
+};
+
+const WeatherIcon = ({ code, size = 24, className = '' }: { code: number; size?: number; className?: string }) => {
+  const s = size;
+  const c = className;
+  if (code === 0) return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" className={c}>
+      <circle cx="12" cy="12" r="5" fill="#FBBF24" />
+      {[0,45,90,135,180,225,270,315].map(a => <line key={a} x1="12" y1="2" x2="12" y2="5" stroke="#FBBF24" strokeWidth="2" strokeLinecap="round" transform={`rotate(${a} 12 12)`} />)}
+    </svg>
+  );
+  if (code <= 3) return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" className={c}>
+      <circle cx="9" cy="9" r="4" fill="#FBBF24" />
+      {[0,60,120,180,240,300].map(a => <line key={a} x1="9" y1="3" x2="9" y2="5" stroke="#FBBF24" strokeWidth="1.5" strokeLinecap="round" transform={`rotate(${a} 9 9)`} />)}
+      <path d="M8 17h10a4 4 0 0 0 0-8h-.5A5.5 5.5 0 0 0 7 11.5V12a4 4 0 0 0 1 5z" fill="#94A3B8" />
+    </svg>
+  );
+  if (code <= 49) return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" className={c}>
+      <path d="M4 10h16M4 14h12M6 18h10" stroke="#94A3B8" strokeWidth="2" strokeLinecap="round" />
+      <path d="M8 14h10a4 4 0 0 0 0-8h-.5A5.5 5.5 0 0 0 7 8.5V9" stroke="#CBD5E1" strokeWidth="2" />
+    </svg>
+  );
+  if (code <= 67) return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" className={c}>
+      <path d="M6 12h10a4 4 0 0 0 0-8h-.5A5.5 5.5 0 0 0 5 6.5V7a4 4 0 0 0 1 5z" fill="#94A3B8" />
+      <line x1="8" y1="15" x2="7" y2="19" stroke="#60A5FA" strokeWidth="2" strokeLinecap="round" />
+      <line x1="12" y1="15" x2="11" y2="19" stroke="#60A5FA" strokeWidth="2" strokeLinecap="round" />
+      <line x1="16" y1="15" x2="15" y2="18" stroke="#60A5FA" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+  if (code <= 77) return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" className={c}>
+      <path d="M6 12h10a4 4 0 0 0 0-8h-.5A5.5 5.5 0 0 0 5 6.5V7a4 4 0 0 0 1 5z" fill="#CBD5E1" />
+      <circle cx="8" cy="17" r="1.5" fill="white" stroke="#94A3B8" />
+      <circle cx="13" cy="16" r="1.5" fill="white" stroke="#94A3B8" />
+      <circle cx="16" cy="19" r="1.5" fill="white" stroke="#94A3B8" />
+    </svg>
+  );
+  if (code >= 95) return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" className={c}>
+      <path d="M6 12h10a4 4 0 0 0 0-8h-.5A5.5 5.5 0 0 0 5 6.5V7a4 4 0 0 0 1 5z" fill="#64748B" />
+      <path d="M13 12l-2 5h3l-2 5" stroke="#FBBF24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+  return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" className={c}>
+      <path d="M6 16h12a5 5 0 0 0 0-10h-.5A6.5 6.5 0 0 0 5 9v1a5 5 0 0 0 1 6z" fill="#94A3B8" />
+    </svg>
+  );
+};
 
 // --- Faculty Browser View ---
 const FacultyBrowserView = ({ faculties }: { faculties: Faculty[] }) => {
