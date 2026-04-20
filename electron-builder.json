@@ -1,6 +1,6 @@
 {
-  "appId": "az.edu.bsu.unikiosk",
-  "productName": "UniKiosk",
+  "appId": "az.edu.oyu.kiosk",
+  "productName": "OYU Kiosk",
   "directories": {
     "output": "release"
   },

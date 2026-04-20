@@ -3,19 +3,29 @@ import { useAuth } from './AuthContext';
 import { adminFetch, apiFetch } from '../shared/api';
 import type { Announcement, Exam, Event as KioskEvent, CafeteriaCategory, InfoContent } from '../shared/types';
 import {
-  LogOut, Bell, Clock, CalendarDays, Coffee, Info, Plus, Trash2, Edit3, Save, X, ChevronRight, GraduationCap, LayoutDashboard, Loader2
+  LogOut, Bell, Clock, CalendarDays, Coffee, Info, Plus, Trash2, Edit3, Save, X, ChevronRight, GraduationCap, LayoutDashboard, Loader2, Users, Shield, ShieldCheck
 } from 'lucide-react';
 
-type Tab = 'dashboard' | 'announcements' | 'exams' | 'events' | 'cafeteria' | 'info';
+type Tab = 'dashboard' | 'announcements' | 'exams' | 'events' | 'cafeteria' | 'info' | 'users';
+
+interface AdminUser {
+  id: number;
+  email: string;
+  name: string;
+  role: string;
+  active: boolean;
+  created_at: string;
+}
 
 export default function AdminDashboard() {
-  const { token, logout } = useAuth();
+  const { token, user: currentUser, logout } = useAuth();
   const [tab, setTab] = useState<Tab>('dashboard');
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
   const [events, setEvents] = useState<KioskEvent[]>([]);
   const [cafeteria, setCafeteria] = useState<CafeteriaCategory[]>([]);
   const [info, setInfo] = useState<InfoContent[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadAll = useCallback(async () => {
@@ -28,8 +38,14 @@ export default function AdminDashboard() {
       apiFetch<InfoContent[]>('/info'),
     ]);
     setAnnouncements(a); setExams(ex); setEvents(ev); setCafeteria(c); setInfo(i);
+    if (currentUser?.role === 'superadmin') {
+      try {
+        const u = await adminFetch<AdminUser[]>('/users', token!);
+        setUsers(u);
+      } catch {}
+    }
     setLoading(false);
-  }, []);
+  }, [token, currentUser?.role]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -40,6 +56,7 @@ export default function AdminDashboard() {
     { key: 'events', label: 'Tədbirlər', icon: <CalendarDays size={20} />, count: events.length },
     { key: 'cafeteria', label: 'Yeməkxana', icon: <Coffee size={20} /> },
     { key: 'info', label: 'Məlumat', icon: <Info size={20} /> },
+    ...(currentUser?.role === 'superadmin' ? [{ key: 'users' as Tab, label: 'İstifadəçilər', icon: <Users size={20} />, count: users.length }] : []),
   ];
 
   return (
@@ -49,7 +66,7 @@ export default function AdminDashboard() {
         <div className="p-6 border-b border-gray-100">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-uni-blue rounded-xl flex items-center justify-center"><GraduationCap size={22} className="text-uni-gold" /></div>
-            <div><h1 className="font-bold text-uni-blue text-lg">UniKiosk</h1><p className="text-xs text-gray-400">Admin Panel</p></div>
+            <div><h1 className="font-bold text-uni-blue text-lg">OYU Kiosk</h1><p className="text-xs text-gray-400">Admin Panel</p></div>
           </div>
         </div>
         <nav className="flex-1 p-4 space-y-1">
@@ -80,6 +97,7 @@ export default function AdminDashboard() {
             {tab === 'events' && <EventsManager items={events} token={token!} onRefresh={loadAll} />}
             {tab === 'cafeteria' && <CafeteriaManager items={cafeteria} token={token!} onRefresh={loadAll} />}
             {tab === 'info' && <InfoManager items={info} token={token!} onRefresh={loadAll} />}
+            {tab === 'users' && currentUser?.role === 'superadmin' && <UsersManager items={users} token={token!} onRefresh={loadAll} />}
           </>
         )}
       </main>
@@ -449,6 +467,108 @@ function InfoManager({ items, token, onRefresh }: { items: InfoContent[]; token:
         <FormModal title={`${editing.title} redaktə et`} onClose={() => setEditing(null)} onSave={save} saving={saving}>
           <Input label="Başlıq" value={editing.title} onChange={v => setEditing({ ...editing, title: v })} />
           <TextArea label="Məzmun (| ilə sətir ayırın)" value={editing.content} onChange={v => setEditing({ ...editing, content: v })} />
+        </FormModal>
+      )}
+    </div>
+  );
+}
+
+// Users Manager
+function UsersManager({ items, token, onRefresh }: { items: AdminUser[]; token: string; onRefresh: () => void }) {
+  const [editing, setEditing] = useState<Partial<AdminUser> & { password?: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      if (editing?.id) {
+        await adminFetch('/users', token, { method: 'PUT', body: JSON.stringify(editing) });
+      } else {
+        await adminFetch('/users', token, { method: 'POST', body: JSON.stringify(editing) });
+      }
+      setEditing(null);
+      onRefresh();
+    } catch (err: any) {
+      alert(err.message);
+    } finally { setSaving(false); }
+  };
+
+  const remove = async (id: number) => {
+    if (!confirm('Bu istifadəçini silmək istədiyinizə əminsiniz?')) return;
+    try {
+      await adminFetch('/users', token, { method: 'DELETE', body: JSON.stringify({ id }) });
+      onRefresh();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const toggleActive = async (user: AdminUser) => {
+    try {
+      await adminFetch('/users', token, { method: 'PUT', body: JSON.stringify({ id: user.id, active: !user.active }) });
+      onRefresh();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold text-gray-900">İstifadəçilər</h2>
+        <button onClick={() => setEditing({ role: 'admin' })} className="flex items-center gap-2 px-4 py-2.5 bg-uni-blue text-white rounded-xl font-medium hover:bg-blue-900">
+          <Plus size={18} /> Yeni istifadəçi
+        </button>
+      </div>
+      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-gray-50 border-b border-gray-100">
+            <tr>
+              <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">Ad</th>
+              <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">Email</th>
+              <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">Rol</th>
+              <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">Status</th>
+              <th className="px-6 py-4"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {items.map(u => (
+              <tr key={u.id} className="hover:bg-gray-50">
+                <td className="px-6 py-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${u.role === 'superadmin' ? 'bg-amber-100 text-amber-600' : 'bg-blue-100 text-blue-600'}`}>
+                      {u.role === 'superadmin' ? <ShieldCheck size={18} /> : <Shield size={18} />}
+                    </div>
+                    <span className="font-medium text-gray-900">{u.name}</span>
+                  </div>
+                </td>
+                <td className="px-6 py-4 text-gray-500">{u.email}</td>
+                <td className="px-6 py-4">
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${u.role === 'superadmin' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+                    {u.role === 'superadmin' ? 'Super Admin' : 'Admin'}
+                  </span>
+                </td>
+                <td className="px-6 py-4">
+                  <button onClick={() => toggleActive(u)} className={`px-3 py-1 rounded-full text-xs font-bold cursor-pointer ${u.active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                    {u.active ? 'Aktiv' : 'Deaktiv'}
+                  </button>
+                </td>
+                <td className="px-6 py-4 flex gap-2 justify-end">
+                  <button onClick={() => setEditing({ ...u, password: '' })} className="p-2 text-gray-400 hover:text-uni-blue"><Edit3 size={18} /></button>
+                  <button onClick={() => remove(u.id)} className="p-2 text-gray-400 hover:text-red-600"><Trash2 size={18} /></button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {editing && (
+        <FormModal title={editing.id ? 'İstifadəçini redaktə et' : 'Yeni istifadəçi'} onClose={() => setEditing(null)} onSave={save} saving={saving}>
+          <Input label="Ad" value={editing.name || ''} onChange={v => setEditing({ ...editing, name: v })} />
+          <Input label="Email" value={editing.email || ''} onChange={v => setEditing({ ...editing, email: v })} type="email" />
+          <Input label={editing.id ? 'Yeni şifrə (boş qalsa dəyişməz)' : 'Şifrə'} value={(editing as any).password || ''} onChange={v => setEditing({ ...editing, password: v })} type="password" />
+          <Select label="Rol" value={editing.role || 'admin'} onChange={v => setEditing({ ...editing, role: v })}
+            options={[{ value: 'admin', label: 'Admin' }, { value: 'superadmin', label: 'Super Admin' }]} />
         </FormModal>
       )}
     </div>

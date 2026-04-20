@@ -1,8 +1,11 @@
-const { app, BrowserWindow, globalShortcut, dialog } = require('electron');
+const { app, BrowserWindow, globalShortcut, ipcMain } = require('electron');
 const path = require('path');
 
 // Security: disable navigation to external URLs
 const ALLOWED_ORIGINS = ['file://', 'http://localhost'];
+
+// PIN code for exiting kiosk mode
+const EXIT_PIN = '1453';
 
 let mainWindow;
 
@@ -62,22 +65,17 @@ function createWindow() {
   });
 }
 
+// IPC: verify PIN from renderer
+ipcMain.handle('verify-pin', (_event, pin) => {
+  return pin === EXIT_PIN;
+});
+
+ipcMain.handle('exit-app', () => {
+  app.quit();
+});
+
 app.on('ready', () => {
   createWindow();
-
-  // Admin exit: Ctrl+Shift+Alt+Q to quit (only admin knows)
-  globalShortcut.register('CommandOrControl+Shift+Alt+Q', () => {
-    const choice = dialog.showMessageBoxSync(mainWindow, {
-      type: 'question',
-      buttons: ['Xeyr', 'Bəli'],
-      title: 'Admin Çıxış',
-      message: 'Kiosk proqramından çıxmaq istəyirsiniz?',
-      defaultId: 0,
-    });
-    if (choice === 1) {
-      app.quit();
-    }
-  });
 
   // Prevent multiple instances
   const gotTheLock = app.requestSingleInstanceLock();

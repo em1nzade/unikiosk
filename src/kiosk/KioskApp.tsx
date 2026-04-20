@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Map, CalendarDays, GraduationCap, Info, Clock, ChevronLeft,
@@ -20,7 +20,7 @@ const Screensaver = ({ onWake }: { onWake: () => void }) => {
       <div className="absolute inset-0 bg-gradient-to-t from-uni-blue via-uni-blue/80 to-transparent"></div>
       <motion.div animate={{ y: [0, -10, 0] }} transition={{ repeat: Infinity, duration: 6, ease: "easeInOut" }} className="flex flex-col items-center relative z-10">
         <GraduationCap size={100} className="text-uni-gold mb-8 drop-shadow-2xl" />
-        <h1 className="text-7xl font-serif font-semibold mb-4 tracking-tight text-white text-shadow-md">Bakı Dövlət Universiteti</h1>
+        <h1 className="text-7xl font-serif font-semibold mb-4 tracking-tight text-white text-shadow-md">Odlar Yurdu Universiteti</h1>
         <p className="text-3xl text-blue-200 mb-16 font-light tracking-wide uppercase">İnformasiya Kiosku</p>
         <div className="text-[10rem] font-light tracking-tighter mb-20 text-white text-shadow-md leading-none">
           {time.toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' })}
@@ -420,6 +420,105 @@ const InfoView = ({ info }: { info: InfoContent[] }) => (
   </div>
 );
 
+// --- PIN Exit Overlay ---
+declare global {
+  interface Window {
+    kioskAPI?: {
+      isKiosk: boolean;
+      verifyPin: (pin: string) => Promise<boolean>;
+      exitApp: () => Promise<void>;
+    };
+  }
+}
+
+const PinExitOverlay = ({ onClose }: { onClose: () => void }) => {
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+
+  const handleDigit = (d: string) => {
+    if (pin.length >= 6) return;
+    const newPin = pin + d;
+    setPin(newPin);
+    setError(false);
+  };
+
+  const handleDelete = () => { setPin(p => p.slice(0, -1)); setError(false); };
+
+  const handleSubmit = async () => {
+    if (!pin || !window.kioskAPI) return;
+    setVerifying(true);
+    const ok = await window.kioskAPI.verifyPin(pin);
+    if (ok) {
+      await window.kioskAPI.exitApp();
+    } else {
+      setError(true);
+      setPin('');
+      setVerifying(false);
+    }
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[100]" onClick={onClose}>
+      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+        className="bg-white rounded-[3rem] p-12 w-[420px] shadow-2xl" onClick={e => e.stopPropagation()}>
+        <h3 className="text-3xl font-bold text-uni-blue text-center mb-2">Admin Çıxış</h3>
+        <p className="text-gray-500 text-center mb-8 text-lg">PIN kodu daxil edin</p>
+        <div className="flex justify-center gap-3 mb-8">
+          {[0,1,2,3].map(i => (
+            <div key={i} className={`w-14 h-14 rounded-2xl border-2 flex items-center justify-center text-3xl font-bold transition-colors ${
+              pin.length > i ? 'border-uni-blue bg-uni-blue text-white' : error ? 'border-red-400 bg-red-50' : 'border-gray-200 bg-gray-50'
+            }`}>
+              {pin.length > i ? '•' : ''}
+            </div>
+          ))}
+        </div>
+        {error && <p className="text-red-500 text-center mb-4 font-medium">Yanlış PIN kod</p>}
+        <div className="grid grid-cols-3 gap-3 mb-6">
+          {['1','2','3','4','5','6','7','8','9'].map(d => (
+            <button key={d} onClick={() => handleDigit(d)}
+              className="h-16 rounded-2xl bg-gray-100 hover:bg-gray-200 text-2xl font-bold text-uni-blue transition-colors active:scale-95">{d}</button>
+          ))}
+          <button onClick={handleDelete} className="h-16 rounded-2xl bg-gray-100 hover:bg-gray-200 text-xl font-bold text-gray-500 transition-colors active:scale-95">Sil</button>
+          <button onClick={() => handleDigit('0')} className="h-16 rounded-2xl bg-gray-100 hover:bg-gray-200 text-2xl font-bold text-uni-blue transition-colors active:scale-95">0</button>
+          <button onClick={handleSubmit} disabled={pin.length === 0 || verifying}
+            className="h-16 rounded-2xl bg-uni-blue hover:bg-blue-900 text-white text-xl font-bold transition-colors active:scale-95 disabled:opacity-50">OK</button>
+        </div>
+        <button onClick={onClose} className="w-full py-3 text-gray-400 hover:text-gray-600 font-medium text-lg">Ləğv et</button>
+      </motion.div>
+    </motion.div>
+  );
+};
+
+// Secret touch zone: 5 taps in top-right corner within 3 seconds
+const SecretExitZone = () => {
+  const [taps, setTaps] = useState(0);
+  const [showPin, setShowPin] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const handleTap = useCallback(() => {
+    if (!window.kioskAPI?.isKiosk) return;
+    setTaps(prev => {
+      const next = prev + 1;
+      clearTimeout(timerRef.current);
+      if (next >= 5) {
+        setShowPin(true);
+        return 0;
+      }
+      timerRef.current = setTimeout(() => setTaps(0), 3000);
+      return next;
+    });
+  }, []);
+
+  return (
+    <>
+      <div onClick={handleTap} className="fixed top-0 right-0 w-20 h-20 z-[99]" style={{ touchAction: 'manipulation' }} />
+      <AnimatePresence>{showPin && <PinExitOverlay onClose={() => setShowPin(false)} />}</AnimatePresence>
+    </>
+  );
+};
+
 // --- Main Kiosk App ---
 export default function KioskApp() {
   const [isIdle, setIsIdle] = useState(true);
@@ -470,6 +569,7 @@ export default function KioskApp() {
   return (
     <div className="w-screen h-screen flex flex-col relative overflow-hidden">
       <div className="ambient-bg"></div>
+      <SecretExitZone />
       <AnimatePresence>{isIdle && <Screensaver onWake={resetIdleTimer} />}</AnimatePresence>
       {!isIdle && (
         <>

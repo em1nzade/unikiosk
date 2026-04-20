@@ -21,7 +21,7 @@ export default function LoginPage() {
           <div className="w-20 h-20 bg-uni-gold/20 rounded-2xl flex items-center justify-center mb-6">
             <GraduationCap size={40} className="text-uni-gold" />
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">UniKiosk Admin</h1>
+          <h1 className="text-3xl font-bold text-white mb-2">OYU Kiosk Admin</h1>
           <p className="text-blue-300 text-sm">Kiosk idarəetmə paneli</p>
         </div>
 
@@ -30,7 +30,7 @@ export default function LoginPage() {
             <label className="text-sm font-medium text-blue-200 mb-2 block">Email</label>
             <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
               className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 outline-none focus:border-uni-gold transition-colors"
-              placeholder="admin@bsu.edu.az" />
+              placeholder="admin@oyu.edu.az" />
           </div>
           <div>
             <label className="text-sm font-medium text-blue-200 mb-2 block">Şifrə</label>
