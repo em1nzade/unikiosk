@@ -105,9 +105,10 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
   const { t } = useI18n();
   const [selectedFacultyId, setSelectedFacultyId] = useState<number | null>(null);
   const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null);
-  const [contentTab, setContentTab] = useState<'schedule' | 'announcement' | 'exam'>('schedule');
+  const [contentTab, setContentTab] = useState<'schedule' | 'announcement' | 'exam'>('announcement');
   const [courseYear, setCourseYear] = useState<number>(1);
   const [groupFilter, setGroupFilter] = useState('');
+  const [showKeyboard, setShowKeyboard] = useState(false);
 
   const faculty = faculties.find(f => f.id === selectedFacultyId);
   const department = faculty?.departments.find(d => d.id === selectedDeptId);
@@ -260,17 +261,15 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
             </div>
             {schedule && schedule.groups.length > 0 && (
               <div className="flex items-center gap-2 ml-auto">
-                <div className="relative">
-                  <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input type="text" value={groupFilter} onChange={e => setGroupFilter(e.target.value)}
-                    placeholder={t('schedule.searchGroup') as string || 'Qrup axtar...'}
-                    className="pl-12 pr-4 py-3 w-64 text-lg bg-white border border-gray-200 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-uni-blue/30 focus:border-uni-blue transition-all" />
+                <button onClick={() => setShowKeyboard(v => !v)}
+                  className={`flex items-center gap-3 pl-5 pr-5 py-3 text-lg rounded-2xl shadow-sm border transition-all ${groupFilter ? 'bg-uni-blue text-white border-uni-blue' : 'bg-white text-gray-500 border-gray-200 hover:border-uni-blue/50'}`}>
+                  <Search size={20} />
+                  <span className="min-w-[120px] text-left">{groupFilter || (t('schedule.searchGroup') as string || 'Qrup axtar...')}</span>
                   {groupFilter && (
-                    <button onClick={() => setGroupFilter('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1">
-                      <span className="text-xl leading-none">&times;</span>
-                    </button>
+                    <span onClick={e => { e.stopPropagation(); setGroupFilter(''); setShowKeyboard(false); }}
+                      className="ml-2 w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-sm hover:bg-white/30">&times;</span>
                   )}
-                </div>
+                </button>
               </div>
             )}
           </div>
@@ -281,6 +280,19 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
               ? schedule.groups.map((g, i) => ({ g, i })).filter(({ g }) => g.toLowerCase().includes(groupFilter.trim().toLowerCase())).map(({ i }) => i)
               : schedule.groups.map((_, i) => i);
             const filteredGroups = filteredIndices.map(i => schedule.groups[i]);
+
+            // Current time detection for "live" highlight
+            const now = new Date();
+            const nowDay = now.getDay(); // 0=Sun,1=Mon...6=Sat
+            const nowMin = now.getHours() * 60 + now.getMinutes();
+            const slotRanges = [
+              { start: 8 * 60, end: 9 * 60 + 20 },       // 08:00-09:20
+              { start: 9 * 60 + 35, end: 10 * 60 + 55 },  // 09:35-10:55
+              { start: 11 * 60 + 10, end: 12 * 60 + 30 },  // 11:10-12:30
+            ];
+            const currentDayIdx = nowDay >= 1 && nowDay <= 5 ? nowDay - 1 : -1; // 0-4 Mon-Fri
+            const currentSlotIdx = slotRanges.findIndex(r => nowMin >= r.start && nowMin <= r.end);
+
             return filteredGroups.length > 0 ? (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
               className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-x-auto">
@@ -296,29 +308,34 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
                 </thead>
                 <tbody>
                   {KIOSK_DAY_NAMES.map((dayName, dayIdx) =>
-                    KIOSK_TIME_SLOTS.map((slot, slotIdx) => (
+                    KIOSK_TIME_SLOTS.map((slot, slotIdx) => {
+                      const isLiveRow = dayIdx === currentDayIdx && slotIdx === currentSlotIdx;
+                      return (
                       <tr key={`${dayIdx}_${slotIdx}`} className={`${slotIdx === 0 ? 'border-t-2 border-uni-blue/30' : 'border-t border-gray-100'}`}>
                         {slotIdx === 0 && (
-                          <td rowSpan={3} className="px-3 py-2 text-center font-black text-2xl text-uni-blue border-r border-gray-200 sticky left-0 bg-white z-10 align-middle">{dayName}</td>
+                          <td rowSpan={3} className={`px-3 py-2 text-center font-black text-2xl border-r border-gray-200 sticky left-0 z-10 align-middle ${dayIdx === currentDayIdx ? 'bg-emerald-50 text-emerald-700' : 'bg-white text-uni-blue'}`}>{dayName}</td>
                         )}
-                        <td className="px-2 py-3 text-sm font-semibold text-gray-600 border-r border-gray-200 sticky left-16 bg-white z-10 whitespace-nowrap">{slot}</td>
+                        <td className={`px-2 py-3 text-sm font-semibold border-r border-gray-200 sticky left-16 z-10 whitespace-nowrap ${isLiveRow ? 'bg-emerald-50 text-emerald-700' : 'bg-white text-gray-600'}`}>{slot}</td>
                         {filteredIndices.map((gIdx) => {
                           const key = `${dayIdx + 1}_${slotIdx + 1}_${gIdx}`;
                           const cell = schedule.cells[key];
+                          const isLive = isLiveRow && !!cell;
                           return (
-                            <td key={gIdx} className="px-2 py-2 border-r border-gray-100 align-top">
+                            <td key={gIdx} className={`px-2 py-2 border-r border-gray-100 align-top transition-colors ${isLive ? 'bg-emerald-50 ring-2 ring-inset ring-emerald-400 rounded-lg' : ''}`}>
                               {cell ? (
                                 <div>
-                                  <p className="text-sm font-bold text-gray-800 leading-snug whitespace-pre-line">{cell.s}</p>
-                                  <p className="text-xs text-gray-500 leading-snug mt-1 whitespace-pre-line">{cell.t}</p>
-                                  {cell.r && <p className="text-xs text-uni-blue font-bold mt-0.5 whitespace-pre-line">Aud: {cell.r}</p>}
+                                  {isLive && <p className="text-[11px] font-bold text-emerald-600 mb-1 flex items-center gap-1"><span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse inline-block" /> İndi gedir</p>}
+                                  <p className={`text-sm font-bold leading-snug whitespace-pre-line ${isLive ? 'text-emerald-900' : 'text-gray-800'}`}>{cell.s}</p>
+                                  <p className={`text-xs leading-snug mt-1 whitespace-pre-line ${isLive ? 'text-emerald-700' : 'text-gray-500'}`}>{cell.t}</p>
+                                  {cell.r && <p className={`text-xs font-bold mt-0.5 whitespace-pre-line ${isLive ? 'text-emerald-600' : 'text-uni-blue'}`}>Aud: {cell.r}</p>}
                                 </div>
                               ) : null}
                             </td>
                           );
                         })}
                       </tr>
-                    ))
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -338,12 +355,62 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
               <p className="text-xl text-gray-500">{t('dept.empty.desc') as string}</p>
             </div>
           )}
+
+          {/* On-screen keyboard */}
+          <AnimatePresence>
+            {showKeyboard && (
+              <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 40 }} transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                className="fixed bottom-0 left-0 right-0 z-50 bg-gray-100/95 backdrop-blur-md border-t border-gray-300 shadow-2xl px-4 pb-6 pt-4">
+                {/* Display bar */}
+                <div className="max-w-3xl mx-auto mb-4 flex items-center gap-3">
+                  <div className="flex-1 bg-white rounded-2xl px-5 py-3 text-2xl font-semibold text-gray-800 border border-gray-200 shadow-sm min-h-[52px] flex items-center">
+                    {groupFilter || <span className="text-gray-400">{t('schedule.searchGroup') as string || 'Qrup axtar...'}</span>}
+                    <span className="animate-pulse text-uni-blue ml-0.5">|</span>
+                  </div>
+                  <button onClick={() => setShowKeyboard(false)}
+                    className="w-14 h-14 rounded-2xl bg-white border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 shadow-sm text-2xl font-bold shrink-0">
+                    ✕
+                  </button>
+                </div>
+                {/* Keys */}
+                <div className="max-w-3xl mx-auto space-y-2">
+                  {[
+                    ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
+                    ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'İ', 'O', 'P'],
+                    ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
+                    ['Z', 'X', 'C', 'V', 'B', 'N', 'M', 'Ə', 'Ö', 'Ü'],
+                  ].map((row, ri) => (
+                    <div key={ri} className="flex justify-center gap-1.5">
+                      {row.map(k => (
+                        <button key={k} onClick={() => setGroupFilter(v => v + k)}
+                          className="w-[9%] max-w-[72px] h-14 bg-white rounded-xl border border-gray-200 text-xl font-bold text-gray-800 shadow-sm active:bg-uni-blue active:text-white active:scale-95 transition-all">
+                          {k}
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                  <div className="flex justify-center gap-1.5">
+                    <button onClick={() => setGroupFilter(v => v.slice(0, -1))}
+                      className="w-[18%] max-w-[144px] h-14 bg-gray-200 rounded-xl border border-gray-300 text-lg font-bold text-gray-600 shadow-sm active:bg-red-500 active:text-white transition-all flex items-center justify-center gap-2">
+                      ← Sil
+                    </button>
+                    <button onClick={() => setGroupFilter(v => v + ' ')}
+                      className="flex-1 max-w-[360px] h-14 bg-white rounded-xl border border-gray-200 text-lg font-semibold text-gray-500 shadow-sm active:bg-gray-100 transition-all">
+                      Boşluq
+                    </button>
+                    <button onClick={() => { setGroupFilter(''); setShowKeyboard(false); }}
+                      className="w-[18%] max-w-[144px] h-14 bg-gray-200 rounded-xl border border-gray-300 text-lg font-bold text-gray-600 shadow-sm active:bg-red-500 active:text-white transition-all flex items-center justify-center">
+                      Təmizlə
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     );
   }
-
-  // Level 3b: Department content (announcements, exams)
   const tabs: { key: 'announcement' | 'exam'; label: string; icon: React.ReactNode }[] = [
     { key: 'announcement', label: t('dept.announcements') as string, icon: <Megaphone size={24} /> },
     { key: 'exam', label: t('dept.exams') as string, icon: <FileText size={24} /> },
