@@ -1,0 +1,22 @@
+{
+  "appId": "az.edu.bsu.unikiosk",
+  "productName": "UniKiosk",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "dist/**/*",
+    "electron/**/*"
+  ],
+  "win": {
+    "target": "nsis",
+    "icon": "public/icon.ico"
+  },
+  "nsis": {
+    "oneClick": true,
+    "perMachine": true,
+    "allowToChangeInstallationDirectory": false,
+    "createDesktopShortcut": true,
+    "runAfterFinish": true
+  }
+}
