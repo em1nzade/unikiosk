@@ -84,7 +84,7 @@ const HomeMenu = ({ onNavigate, announcements }: { onNavigate: (v: string) => vo
   const bannerConfig = getBannerConfig(currentAnn.importance);
 
   const containerVariants = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.1 } } };
-  const itemVariants = { hidden: { opacity: 0, y: 30, scale: 0.95 }, show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring", stiffness: 300, damping: 24 } } };
+  const itemVariants = { hidden: { opacity: 0, y: 30, scale: 0.95 }, show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring" as const, stiffness: 300, damping: 24 } } };
 
   return (
     <div className="flex-1 pt-32 pb-10 px-12 overflow-hidden flex flex-col items-center justify-center gap-6 max-h-screen">
