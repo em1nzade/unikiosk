@@ -145,7 +145,7 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
   }
 
   // Level 2: Department list (with schedule link at top)
-  if (!department) {
+  if (!department && contentTab !== 'schedule') {
     const facultySchedules = schedules.filter(s => s.faculty_id === faculty.id);
     const hasSchedules = facultySchedules.length > 0;
     return (
@@ -204,7 +204,7 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
     return (
       <div className="flex-1 pt-40 pb-12 px-8 overflow-y-auto">
         <div className="max-w-[95vw] mx-auto">
-          <button onClick={() => { setContentTab('announcement'); }}
+          <button onClick={() => { setContentTab('announcement'); setSelectedDeptId(null); }}
             className="flex items-center gap-3 text-xl font-bold text-uni-blue bg-white px-6 py-3 rounded-full shadow-sm mb-6 hover:bg-gray-50 transition-colors w-fit border border-gray-100">
             <ChevronLeft size={24} /> {faculty.name}
           </button>
