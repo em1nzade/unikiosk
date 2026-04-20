@@ -1,18 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import { adminFetch, apiFetch } from '../shared/api';
-import type { Announcement, Faculty, Department, DeptContent, Event as KioskEvent, CafeteriaCategory, InfoContent, KioskSettings } from '../shared/types';
+import type { Announcement, Faculty, Department, DeptContent, Event as KioskEvent, CafeteriaCategory, InfoContent, KioskSettings, Schedule, ScheduleCell } from '../shared/types';
 import {
   LogOut, Bell, Clock, CalendarDays, Coffee, Info, Plus, Trash2, Edit3, Save, X, ChevronRight, ChevronLeft,
-  GraduationCap, LayoutDashboard, Loader2, Users, Shield, ShieldCheck, Settings, Check, ChevronDown, Monitor
+  GraduationCap, LayoutDashboard, Loader2, Users, Shield, ShieldCheck, Settings, Check, ChevronDown, Monitor, Table2
 } from 'lucide-react';
 
-type Tab = 'dashboard' | 'announcements' | 'faculties' | 'events' | 'cafeteria' | 'info' | 'users' | 'settings' | 'devices';
+type Tab = 'dashboard' | 'announcements' | 'faculties' | 'schedules' | 'events' | 'cafeteria' | 'info' | 'users' | 'settings' | 'devices';
 
 const ALL_PERMISSIONS: { key: string; label: string }[] = [
   { key: 'dashboard', label: 'Panel' },
   { key: 'announcements', label: 'Elanlar' },
   { key: 'faculties', label: 'Fakültələr' },
+  { key: 'schedules', label: 'Dərs Cədvəlləri' },
   { key: 'events', label: 'Tədbirlər' },
   { key: 'cafeteria', label: 'Yeməkxana' },
   { key: 'info', label: 'Məlumat' },
@@ -238,6 +239,7 @@ export default function AdminDashboard() {
     { key: 'dashboard', label: 'Panel', icon: <LayoutDashboard size={20} />, perm: 'dashboard' },
     { key: 'announcements', label: 'Elanlar', icon: <Bell size={20} />, count: announcements.length, perm: 'announcements' },
     { key: 'faculties', label: 'Fakültələr', icon: <Clock size={20} />, count: faculties.length, perm: 'faculties' },
+    { key: 'schedules', label: 'Dərs Cədvəlləri', icon: <Table2 size={20} />, perm: 'schedules' },
     { key: 'events', label: 'Tədbirlər', icon: <CalendarDays size={20} />, count: events.length, perm: 'events' },
     { key: 'cafeteria', label: 'Yeməkxana', icon: <Coffee size={20} />, perm: 'cafeteria' },
     { key: 'info', label: 'Məlumat', icon: <Info size={20} />, perm: 'info' },
@@ -313,6 +315,7 @@ export default function AdminDashboard() {
             {tab === 'dashboard' && <DashboardView announcements={announcements} faculties={faculties} events={events} onNavigate={setTab} />}
             {tab === 'announcements' && <AnnouncementsManager items={announcements} token={token!} onRefresh={loadAll} />}
             {tab === 'faculties' && <FacultyManager faculties={faculties} token={token!} onRefresh={loadAll} />}
+            {tab === 'schedules' && <ScheduleEditor faculties={faculties} token={token!} />}
             {tab === 'events' && <EventsManager items={events} token={token!} onRefresh={loadAll} />}
             {tab === 'cafeteria' && <CafeteriaManager items={cafeteria} token={token!} onRefresh={loadAll} />}
             {tab === 'info' && <InfoManager items={info} token={token!} onRefresh={loadAll} />}
@@ -1059,7 +1062,7 @@ function UsersManager({ items, token, onRefresh }: { items: AdminUser[]; token: 
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-900">İstifadəçilər</h2>
-        <button onClick={() => setEditing({ role: 'admin', permissions: ['dashboard', 'announcements', 'faculties', 'events', 'cafeteria', 'info'] })}
+        <button onClick={() => setEditing({ role: 'admin', permissions: ['dashboard', 'announcements', 'faculties', 'schedules', 'events', 'cafeteria', 'info'] })}
           className="flex items-center gap-2 px-4 py-2.5 bg-uni-blue text-white rounded-xl font-medium hover:bg-blue-900">
           <Plus size={18} /> Yeni istifadəçi
         </button>

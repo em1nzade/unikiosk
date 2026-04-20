@@ -125,6 +125,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    // --- Schedules (grid-based) ---
+    if (entity === 'schedule') {
+      if (req.method === 'GET') {
+        const fid = req.query.faculty_id as string | undefined;
+        if (fid) {
+          const rows = await sql`SELECT * FROM schedules WHERE faculty_id = ${Number(fid)} ORDER BY course_year, sector`;
+          return res.json(rows);
+        }
+        const rows = await sql`SELECT * FROM schedules ORDER BY faculty_id, course_year, sector`;
+        return res.json(rows);
+      }
+      if (req.method === 'PUT') {
+        const { faculty_id, course_year, sector, groups, cells } = req.body;
+        if (!faculty_id || !course_year) return res.status(400).json({ error: 'faculty_id and course_year required' });
+        const rows = await sql`INSERT INTO schedules (faculty_id, course_year, sector, groups, cells)
+          VALUES (${faculty_id}, ${course_year}, ${sector || 'az'}, ${JSON.stringify(groups || [])}::jsonb, ${JSON.stringify(cells || {})}::jsonb)
+          ON CONFLICT (faculty_id, course_year, sector)
+          DO UPDATE SET groups = EXCLUDED.groups, cells = EXCLUDED.cells, updated_at = now()
+          RETURNING *`;
+        return res.json(rows[0]);
+      }
+      if (req.method === 'DELETE') {
+        const { id } = req.body;
+        if (!id) return res.status(400).json({ error: 'ID required' });
+        await sql`DELETE FROM schedules WHERE id = ${id}`;
+        return res.json({ success: true });
+      }
+    }
+
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });

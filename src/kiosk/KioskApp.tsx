@@ -12,6 +12,21 @@ import type { Announcement, Faculty, Event as KioskEvent, CafeteriaCategory, Inf
 const LOCALE_MAP: Record<Lang, string> = { az: 'az-AZ', en: 'en-GB', ru: 'ru-RU' };
 const LANG_LABELS: Record<Lang, string> = { az: 'AZ', en: 'EN', ru: 'RU' };
 
+const AZ_MONTHS = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'İyun', 'İyul', 'Avqust', 'Sentyabr', 'Oktyabr', 'Noyabr', 'Dekabr'];
+const AZ_WEEKDAYS = ['Bazar', 'Bazar ertəsi', 'Çərşənbə axşamı', 'Çərşənbə', 'Cümə axşamı', 'Cümə', 'Şənbə'];
+
+const formatTime = (d: Date, lang: Lang) => {
+  const h = d.getHours().toString().padStart(2, '0');
+  const m = d.getMinutes().toString().padStart(2, '0');
+  if (lang === 'az') return `${h}:${m}`;
+  return d.toLocaleTimeString(LOCALE_MAP[lang], { hour: '2-digit', minute: '2-digit' });
+};
+
+const formatDate = (d: Date, lang: Lang) => {
+  if (lang === 'az') return `${AZ_WEEKDAYS[d.getDay()]}, ${d.getDate()} ${AZ_MONTHS[d.getMonth()]}`;
+  return d.toLocaleDateString(LOCALE_MAP[lang], { weekday: 'long', day: 'numeric', month: 'long' });
+};
+
 // --- Baku Weather ---
 type WeatherData = { temp: number; code: number } | null;
 
@@ -249,7 +264,7 @@ const Screensaver = ({ onWake, weather }: { onWake: () => void; weather: Weather
         <h1 className="text-7xl font-serif font-semibold mb-4 tracking-tight text-white text-shadow-md">{t('uni.name') as string}</h1>
         <p className="text-3xl text-blue-200 mb-16 font-light tracking-wide uppercase">{t('kiosk.title') as string}</p>
         <div className="text-[10rem] font-light tracking-tighter text-white text-shadow-md leading-none">
-          {time.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
+          {formatTime(time, lang)}
         </div>
         {weather && (
           <div className="flex items-center gap-4 mt-6 mb-14">
@@ -300,8 +315,8 @@ const Header = ({ title, onHome, onBack, weather }: { title: string; onHome: () 
         <div className="glass-panel px-8 py-5 rounded-[2rem] flex items-center gap-6 shadow-lg">
           {/* Clock */}
           <div className="text-right">
-            <div className="text-4xl font-bold text-uni-blue tracking-tight leading-none">{time.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}</div>
-            <div className="text-gray-500 font-medium text-base mt-1">{time.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+            <div className="text-4xl font-bold text-uni-blue tracking-tight leading-none">{formatTime(time, lang)}</div>
+            <div className="text-gray-500 font-medium text-base mt-1">{formatDate(time, lang)}</div>
           </div>
           {/* Weather divider + widget */}
           {weather && (
@@ -734,7 +749,7 @@ const MaintenanceScreen = () => {
       <h1 className="text-4xl font-bold text-white mb-3">Texniki Fasilə</h1>
       <p className="text-xl text-gray-400 mb-8">Sistem müvəqqəti dayandırılıb</p>
       <div className="text-5xl font-light text-gray-500">
-        {time.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
+        {formatTime(time, lang)}
       </div>
     </motion.div>
   );

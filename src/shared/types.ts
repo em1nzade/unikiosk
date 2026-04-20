@@ -77,11 +77,28 @@ export interface InfoContent {
 export interface KioskData {
   announcements: Announcement[];
   faculties: Faculty[];
+  schedules: Schedule[];
   events: Event[];
   cafeteria: CafeteriaCategory[];
   info: InfoContent[];
   settings: KioskSettings;
   etag: string;
+}
+
+export interface ScheduleCell {
+  s: string; // subject
+  t: string; // teacher
+  r: string; // room
+}
+
+export interface Schedule {
+  id: number;
+  faculty_id: number;
+  course_year: number;
+  sector: string;
+  groups: string[];
+  cells: Record<string, ScheduleCell>; // key: "day_slot_groupIndex"
+  updated_at: string;
 }
 
 export interface KioskSettings {

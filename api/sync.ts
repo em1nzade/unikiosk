@@ -30,7 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    const [announcements, events, cafeteria_categories, cafeteria_items, info, settingsRows, fac_rows, dept_rows, content_rows] = await Promise.all([
+    const [announcements, events, cafeteria_categories, cafeteria_items, info, settingsRows, fac_rows, dept_rows, content_rows, schedule_rows] = await Promise.all([
       sql`SELECT * FROM announcements WHERE active = true ORDER BY importance ASC, created_at DESC`,
       sql`SELECT * FROM events WHERE active = true ORDER BY created_at DESC`,
       sql`SELECT * FROM cafeteria_categories WHERE active = true ORDER BY sort_order ASC`,
@@ -40,6 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       sql`SELECT * FROM faculties WHERE active = true ORDER BY sort_order ASC`,
       sql`SELECT * FROM departments WHERE active = true ORDER BY sort_order ASC`,
       sql`SELECT * FROM dept_content WHERE active = true ORDER BY sort_order ASC, created_at DESC`,
+      sql`SELECT * FROM schedules ORDER BY faculty_id, course_year, sector`,
     ]);
 
     const cafeteria = cafeteria_categories.map((cat: any) => ({
@@ -64,6 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const result_data: Record<string, any> = {
       announcements: hiddenSections.includes('announcements') ? [] : announcements,
       faculties: hiddenSections.includes('exams') ? [] : faculties,
+      schedules: hiddenSections.includes('exams') ? [] : schedule_rows,
       events: hiddenSections.includes('events') ? [] : events,
       cafeteria: hiddenSections.includes('cafeteria') ? [] : cafeteria,
       info: hiddenSections.includes('info') ? [] : info,
