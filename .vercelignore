@@ -1,0 +1,9 @@
+node_modules
+electron
+.git
+release
+dist
+*.cjs
+_write_admin.cjs
+package-lock.json
+scripts

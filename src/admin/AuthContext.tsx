@@ -1,8 +1,15 @@
 import { useState, useEffect, createContext, useContext, type ReactNode } from 'react';
 
+interface AdminUser {
+  email: string;
+  name: string;
+  role: string;
+  permissions: string[];
+}
+
 interface AuthContextType {
   token: string | null;
-  user: { email: string; name: string; role: string } | null;
+  user: AdminUser | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   loading: boolean;
@@ -16,7 +23,7 @@ const API_URL = import.meta.env.VITE_API_URL || '';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => sessionStorage.getItem('admin_token'));
-  const [user, setUser] = useState<{ email: string; name: string; role: string } | null>(() => {
+  const [user, setUser] = useState<AdminUser | null>(() => {
     const stored = sessionStorage.getItem('admin_user');
     return stored ? JSON.parse(stored) : null;
   });

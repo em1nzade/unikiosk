@@ -1,4 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+const fs = require('fs');
+const path = require('path');
+
+const content = `import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import { adminFetch, apiFetch } from '../shared/api';
 import type { Announcement, Exam, Event as KioskEvent, CafeteriaCategory, InfoContent, KioskSettings } from '../shared/types';
@@ -653,12 +656,12 @@ function CafeteriaManager({ items, token, onRefresh }: { items: CafeteriaCategor
   };
 
   const bulkAdd = async (categoryId: number) => {
-    const lines = bulkText.split('\n').filter(l => l.trim());
+    const lines = bulkText.split('\\n').filter(l => l.trim());
     if (lines.length === 0) return;
     setSaving(true);
     try {
       const parsedItems = lines.map(line => {
-        const parts = line.split(/[\t,;|]/).map(p => p.trim());
+        const parts = line.split(/[\\t,;|]/).map(p => p.trim());
         return { name: parts[0], price: parts[1] ? parseFloat(parts[1]) : null };
       });
       await adminFetch('/cafeteria', token, { method: 'POST', body: JSON.stringify({ action: 'bulk_add', category_id: categoryId, items: parsedItems }) });
@@ -667,13 +670,13 @@ function CafeteriaManager({ items, token, onRefresh }: { items: CafeteriaCategor
   };
 
   const replaceCategory = async (categoryId: number) => {
-    const lines = bulkText.split('\n').filter(l => l.trim());
+    const lines = bulkText.split('\\n').filter(l => l.trim());
     if (lines.length === 0) return;
     if (!confirm('Bu kateqoriyanın bütün elementləri silinib yeniləri ilə əvəzlənəcək. Əminsiniz?')) return;
     setSaving(true);
     try {
       const parsedItems = lines.map(line => {
-        const parts = line.split(/[\t,;|]/).map(p => p.trim());
+        const parts = line.split(/[\\t,;|]/).map(p => p.trim());
         return { name: parts[0], price: parts[1] ? parseFloat(parts[1]) : null };
       });
       await adminFetch('/cafeteria', token, { method: 'POST', body: JSON.stringify({ action: 'replace_category_items', category_id: categoryId, items: parsedItems }) });
@@ -746,7 +749,7 @@ function CafeteriaManager({ items, token, onRefresh }: { items: CafeteriaCategor
               <div className="mb-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
                 <p className="text-sm text-gray-600 mb-2">Hər sətirdə bir element yazın. Qiymət üçün vergül və ya tab ilə ayırın:</p>
                 <p className="text-xs text-gray-400 mb-2">Məs: Toyuq şorbası, 3.50</p>
-                <textarea value={bulkText} onChange={e => setBulkText(e.target.value)} rows={6} placeholder={"Toyuq şorbası, 3.50\nCəsar salatı, 4.00\nÇay"}
+                <textarea value={bulkText} onChange={e => setBulkText(e.target.value)} rows={6} placeholder={"Toyuq şorbası, 3.50\\nCəsar salatı, 4.00\\nÇay"}
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:border-uni-blue resize-none font-mono text-sm" />
                 <div className="flex gap-2 mt-3">
                   <button onClick={() => bulkAdd(cat.id)} disabled={saving} className="px-4 py-2 bg-green-600 text-white rounded-xl text-sm font-medium disabled:opacity-50">Əlavə et</button>
@@ -808,7 +811,7 @@ function InfoManager({ items, token, onRefresh }: { items: InfoContent[]; token:
               <h3 className="text-lg font-bold text-gray-900">{sec.title}</h3>
               <button onClick={() => setEditing(sec)} className="p-2 text-gray-400 hover:text-uni-blue"><Edit3 size={18} /></button>
             </div>
-            <p className="text-gray-600 whitespace-pre-line">{sec.content.replace(/\|/g, '\n')}</p>
+            <p className="text-gray-600 whitespace-pre-line">{sec.content.replace(/\\|/g, '\\n')}</p>
           </div>
         ))}
       </div>
@@ -952,3 +955,7 @@ function UsersManager({ items, token, onRefresh }: { items: AdminUser[]; token: 
     </div>
   );
 }
+`;
+
+fs.writeFileSync(path.join(__dirname, 'src', 'admin', 'AdminDashboard.tsx'), content, 'utf8');
+console.log('AdminDashboard.tsx written successfully');

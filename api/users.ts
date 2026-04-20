@@ -34,7 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     if (req.method === 'GET') {
-      const rows = await sql`SELECT id, email, name, role, active, created_at FROM admin_users ORDER BY created_at ASC`;
+      const rows = await sql`SELECT id, email, name, role, active, permissions, created_at FROM admin_users ORDER BY created_at ASC`;
       return res.json(rows);
     }
 
@@ -42,15 +42,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (admin.role !== 'superadmin') return res.status(403).json({ error: 'Yalnız superadmin istifadəçiləri idarə edə bilər' });
 
     if (req.method === 'POST') {
-      const { email, password, name, role } = req.body;
+      const { email, password, name, role, permissions } = req.body;
       if (!email || !password || !name) return res.status(400).json({ error: 'Email, şifrə və ad tələb olunur' });
       const passwordHash = await hash(password, 10);
-      const rows = await sql`INSERT INTO admin_users (email, password_hash, name, role) VALUES (${email}, ${passwordHash}, ${name}, ${role || 'admin'}) RETURNING id, email, name, role, active, created_at`;
+      const perms = permissions || (role === 'superadmin' ? '["dashboard","announcements","exams","events","cafeteria","info","settings","users"]' : '["dashboard","announcements","exams","events","cafeteria","info"]');
+      const rows = await sql`INSERT INTO admin_users (email, password_hash, name, role, permissions) VALUES (${email}, ${passwordHash}, ${name}, ${role || 'admin'}, ${JSON.stringify(perms)}) RETURNING id, email, name, role, active, permissions, created_at`;
       return res.status(201).json(rows[0]);
     }
 
     if (req.method === 'PUT') {
-      const { id, email, name, role, active, password } = req.body;
+      const { id, email, name, role, active, password, permissions } = req.body;
       if (!id) return res.status(400).json({ error: 'ID tələb olunur' });
 
       // Don't let superadmin deactivate themselves
@@ -60,11 +61,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (password) {
         const passwordHash = await hash(password, 10);
-        const rows = await sql`UPDATE admin_users SET email = COALESCE(${email}, email), name = COALESCE(${name}, name), role = COALESCE(${role}, role), active = COALESCE(${active}, active), password_hash = ${passwordHash}, updated_at = NOW() WHERE id = ${id} RETURNING id, email, name, role, active, created_at`;
+        const rows = await sql`UPDATE admin_users SET email = COALESCE(${email}, email), name = COALESCE(${name}, name), role = COALESCE(${role}, role), active = COALESCE(${active}, active), password_hash = ${passwordHash}, permissions = COALESCE(${permissions ? JSON.stringify(permissions) : null}, permissions), updated_at = NOW() WHERE id = ${id} RETURNING id, email, name, role, active, permissions, created_at`;
         return res.json(rows[0]);
       }
 
-      const rows = await sql`UPDATE admin_users SET email = COALESCE(${email || null}, email), name = COALESCE(${name || null}, name), role = COALESCE(${role || null}, role), active = COALESCE(${active}, active), updated_at = NOW() WHERE id = ${id} RETURNING id, email, name, role, active, created_at`;
+      const rows = await sql`UPDATE admin_users SET email = COALESCE(${email || null}, email), name = COALESCE(${name || null}, name), role = COALESCE(${role || null}, role), active = COALESCE(${active}, active), permissions = COALESCE(${permissions ? JSON.stringify(permissions) : null}, permissions), updated_at = NOW() WHERE id = ${id} RETURNING id, email, name, role, active, permissions, created_at`;
       return res.json(rows[0]);
     }
 

@@ -62,5 +62,13 @@ export interface KioskData {
   events: Event[];
   cafeteria: CafeteriaCategory[];
   info: InfoContent[];
+  settings: KioskSettings;
   etag: string;
+}
+
+export interface KioskSettings {
+  ticker_enabled: boolean;
+  ticker_mode: 'scroll' | 'static';
+  ticker_pinned_id: number | null;
+  default_language: string;
 }

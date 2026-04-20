@@ -38,7 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .setExpirationTime('8h')
       .sign(secret);
 
-    return res.json({ token: jwt, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
+    return res.json({ token: jwt, user: { id: user.id, email: user.email, name: user.name, role: user.role, permissions: user.permissions || [] } });
   } catch (err: any) {
     console.error('Login error:', err);
     return res.status(500).json({ error: 'Server error' });

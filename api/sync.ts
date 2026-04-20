@@ -31,13 +31,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(304).end();
     }
 
-    const [announcements, exams, events, cafeteria_categories, cafeteria_items, info] = await Promise.all([
+    const [announcements, exams, events, cafeteria_categories, cafeteria_items, info, settingsRows] = await Promise.all([
       sql`SELECT * FROM announcements WHERE active = true ORDER BY importance ASC, created_at DESC`,
       sql`SELECT * FROM exams WHERE active = true ORDER BY exam_date ASC, time_slot ASC`,
       sql`SELECT * FROM events WHERE active = true ORDER BY created_at DESC`,
       sql`SELECT * FROM cafeteria_categories WHERE active = true ORDER BY sort_order ASC`,
       sql`SELECT * FROM cafeteria_items WHERE active = true ORDER BY sort_order ASC`,
       sql`SELECT * FROM info_content WHERE active = true ORDER BY sort_order ASC`,
+      sql`SELECT key, value FROM kiosk_settings`,
     ]);
 
     const cafeteria = cafeteria_categories.map((cat: any) => ({
@@ -45,9 +46,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       items: cafeteria_items.filter((item: any) => item.category_id === cat.id),
     }));
 
+    const settings: Record<string, any> = {};
+    for (const row of settingsRows) {
+      settings[row.key] = row.value;
+    }
+
     res.setHeader('ETag', etag);
     res.setHeader('Cache-Control', 'no-cache');
-    return res.json({ announcements, exams, events, cafeteria, info, etag });
+    return res.json({ announcements, exams, events, cafeteria, info, settings, etag });
   } catch (err: any) {
     return res.status(500).json({ error: err.message, stack: err.stack });
   }

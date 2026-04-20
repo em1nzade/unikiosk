@@ -54,6 +54,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const rows = await sql`INSERT INTO cafeteria_items (category_id, name, price, sort_order) VALUES (${category_id}, ${name}, ${price || null}, ${sort_order || 0}) RETURNING *`;
         return res.status(201).json(rows[0]);
       }
+      if (action === 'bulk_add') {
+        const { category_id, items } = req.body;
+        if (!category_id || !Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'category_id and items array required' });
+        const results = [];
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (!item.name?.trim()) continue;
+          const rows = await sql`INSERT INTO cafeteria_items (category_id, name, price, sort_order) VALUES (${category_id}, ${item.name.trim()}, ${item.price || null}, ${i}) RETURNING *`;
+          results.push(rows[0]);
+        }
+        return res.status(201).json(results);
+      }
+      if (action === 'replace_category_items') {
+        const { category_id, items } = req.body;
+        if (!category_id || !Array.isArray(items)) return res.status(400).json({ error: 'category_id and items array required' });
+        await sql`DELETE FROM cafeteria_items WHERE category_id = ${category_id}`;
+        const results = [];
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (!item.name?.trim()) continue;
+          const rows = await sql`INSERT INTO cafeteria_items (category_id, name, price, sort_order) VALUES (${category_id}, ${item.name.trim()}, ${item.price || null}, ${i}) RETURNING *`;
+          results.push(rows[0]);
+        }
+        return res.status(201).json(results);
+      }
       return res.status(400).json({ error: 'Invalid action' });
     }
 
@@ -72,11 +97,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'DELETE') {
-      const { action, id } = req.body;
-      if (!id) return res.status(400).json({ error: 'ID required' });
+      const { action, id, ids } = req.body;
       if (action === 'delete_category') {
+        if (!id) return res.status(400).json({ error: 'ID required' });
+        await sql`DELETE FROM cafeteria_items WHERE category_id = ${id}`;
         await sql`DELETE FROM cafeteria_categories WHERE id = ${id}`;
+      } else if (action === 'bulk_delete') {
+        if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids array required' });
+        for (const itemId of ids) {
+          await sql`DELETE FROM cafeteria_items WHERE id = ${itemId}`;
+        }
       } else {
+        if (!id) return res.status(400).json({ error: 'ID required' });
         await sql`DELETE FROM cafeteria_items WHERE id = ${id}`;
       }
       return res.json({ success: true });
