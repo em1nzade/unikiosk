@@ -11,7 +11,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>(null!);
 export const useAuth = () => useContext(AuthContext);
 
-const NEON_AUTH_URL = import.meta.env.VITE_NEON_AUTH_URL || '';
+const API_URL = import.meta.env.VITE_API_URL || '';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => sessionStorage.getItem('admin_token'));
@@ -27,17 +27,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${NEON_AUTH_URL}/sign-in/email`, {
+      const res = await fetch(`${API_URL}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.message || 'Giriş uğursuz oldu');
+        throw new Error(body.error || 'Giriş uğursuz oldu');
       }
       const data = await res.json();
-      setToken(data.token || data.session?.token || data.accessToken);
+      setToken(data.token);
     } catch (err: any) {
       setError(err.message);
       throw err;

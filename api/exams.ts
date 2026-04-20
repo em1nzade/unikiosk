@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { neon } from '@neondatabase/serverless';
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { jwtVerify } from 'jose';
 
 function handleCors(req: VercelRequest, res: VercelResponse): boolean {
   const origin = req.headers.origin || '';
@@ -17,8 +17,8 @@ async function verifyAdmin(req: VercelRequest): Promise<boolean> {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) return false;
   try {
-    const JWKS = createRemoteJWKSet(new URL(process.env.JWKS_URL!));
-    const { payload } = await jwtVerify(authHeader.slice(7), JWKS, { algorithms: ['RS256'] });
+    const secret = new TextEncoder().encode(process.env.ADMIN_JWT_SECRET!);
+    const { payload } = await jwtVerify(authHeader.slice(7), secret, { algorithms: ['HS256'] });
     return !!(payload.sub && payload.email);
   } catch { return false; }
 }
