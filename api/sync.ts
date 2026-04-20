@@ -30,19 +30,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    const [announcements, exams, events, cafeteria_categories, cafeteria_items, info, settingsRows] = await Promise.all([
+    const [announcements, events, cafeteria_categories, cafeteria_items, info, settingsRows, fac_rows, dept_rows, content_rows] = await Promise.all([
       sql`SELECT * FROM announcements WHERE active = true ORDER BY importance ASC, created_at DESC`,
-      sql`SELECT * FROM exams WHERE active = true ORDER BY exam_date ASC, time_slot ASC`,
       sql`SELECT * FROM events WHERE active = true ORDER BY created_at DESC`,
       sql`SELECT * FROM cafeteria_categories WHERE active = true ORDER BY sort_order ASC`,
       sql`SELECT * FROM cafeteria_items WHERE active = true ORDER BY sort_order ASC`,
       sql`SELECT * FROM info_content WHERE active = true ORDER BY sort_order ASC`,
       sql`SELECT key, value FROM kiosk_settings`,
+      sql`SELECT * FROM faculties WHERE active = true ORDER BY sort_order ASC`,
+      sql`SELECT * FROM departments WHERE active = true ORDER BY sort_order ASC`,
+      sql`SELECT * FROM dept_content WHERE active = true ORDER BY sort_order ASC, created_at DESC`,
     ]);
 
     const cafeteria = cafeteria_categories.map((cat: any) => ({
       ...cat,
       items: cafeteria_items.filter((item: any) => item.category_id === cat.id),
+    }));
+
+    const faculties = fac_rows.map((f: any) => ({
+      ...f,
+      departments: dept_rows.filter((d: any) => d.faculty_id === f.id).map((d: any) => ({
+        ...d,
+        content: content_rows.filter((c: any) => c.department_id === d.id),
+      })),
     }));
 
     const settings: Record<string, any> = {};
@@ -53,7 +63,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Apply per-device hidden sections
     const result_data: Record<string, any> = {
       announcements: hiddenSections.includes('announcements') ? [] : announcements,
-      exams: hiddenSections.includes('exams') ? [] : exams,
+      faculties: hiddenSections.includes('exams') ? [] : faculties,
       events: hiddenSections.includes('events') ? [] : events,
       cafeteria: hiddenSections.includes('cafeteria') ? [] : cafeteria,
       info: hiddenSections.includes('info') ? [] : info,

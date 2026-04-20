@@ -10,8 +10,8 @@ const translations = {
 
   // Navigation
   'nav.home': { az: 'Ana Səhifə', en: 'Home', ru: 'Главная' },
-  'nav.exams': { az: 'İmtahan Cədvəlləri', en: 'Exam Schedules', ru: 'Расписание экзаменов' },
-  'nav.exams.desc': { az: 'Fakültələr və qruplar üzrə ən son imtahan və dərs cədvəlləri', en: 'Latest exam and class schedules by faculties and groups', ru: 'Расписание экзаменов по факультетам и группам' },
+  'nav.faculties': { az: 'Fakültələr', en: 'Faculties', ru: 'Факультеты' },
+  'nav.faculties.desc': { az: 'Fakültələr, kafedralar, dərs cədvəlləri və elanlar', en: 'Faculties, departments, schedules and announcements', ru: 'Факультеты, кафедры, расписания и объявления' },
   'nav.map': { az: 'Xəritə', en: 'Map', ru: 'Карта' },
   'nav.map.desc': { az: 'Auditoriyalar', en: 'Classrooms', ru: 'Аудитории' },
   'nav.info': { az: 'Məlumat', en: 'Information', ru: 'Информация' },
@@ -24,21 +24,24 @@ const translations = {
 
   // Header titles
   'title.map': { az: 'Xəritə və Yönləndirmə', en: 'Map & Navigation', ru: 'Карта и Навигация' },
-  'title.exams': { az: 'İmtahan Cədvəli', en: 'Exam Schedule', ru: 'Расписание экзаменов' },
+  'title.faculties': { az: 'Fakültələr', en: 'Faculties', ru: 'Факультеты' },
   'title.events': { az: 'Tədbirlər', en: 'Events', ru: 'Мероприятия' },
   'title.cafeteria': { az: 'Tələbə Yeməkxanası', en: 'Student Cafeteria', ru: 'Студенческая столовая' },
   'title.info': { az: 'Ümumi Məlumat', en: 'General Information', ru: 'Общая информация' },
   'title.announcements': { az: 'Universitet üzrə Elanlar', en: 'University Announcements', ru: 'Объявления' },
 
-  // Exams view
-  'exams.title': { az: 'İmtahan Cədvəli', en: 'Exam Schedule', ru: 'Расписание экзаменов' },
-  'exams.enter.group': { az: 'İmtahanlarınızı görmək üçün qrup nömrənizi daxil edin.', en: 'Enter your group number to see your exams.', ru: 'Введите номер группы для просмотра экзаменов.' },
-  'exams.placeholder': { az: 'Məsələn: 652', en: 'E.g.: 652', ru: 'Например: 652' },
-  'exams.search': { az: 'Axtar', en: 'Search', ru: 'Поиск' },
-  'exams.group': { az: 'Qrup', en: 'Group', ru: 'Группа' },
-  'exams.other.group': { az: 'Başqa qrup axtar', en: 'Search other group', ru: 'Поиск другой группы' },
-  'exams.not.found': { az: 'Heç nə tapılmadı', en: 'Nothing found', ru: 'Ничего не найдено' },
-  'exams.not.found.desc': { az: 'qrupu üçün imtahan cədvəli tapılmadı.', en: 'exam schedule not found for group', ru: 'расписание экзаменов для группы не найдено.' },
+  // Faculty browser
+  'faculty.title': { az: 'Fakültələr', en: 'Faculties', ru: 'Факультеты' },
+  'faculty.select': { az: 'Fakültəni seçin', en: 'Select a faculty', ru: 'Выберите факультет' },
+  'faculty.deptCount': { az: 'kafedra', en: 'departments', ru: 'кафедр' },
+  'faculty.back': { az: 'Fakültələrə qayıt', en: 'Back to faculties', ru: 'Назад к факультетам' },
+  'faculty.selectDept': { az: 'Kafedranı seçin', en: 'Select a department', ru: 'Выберите кафедру' },
+  'dept.schedules': { az: 'Dərs Cədvəli', en: 'Schedules', ru: 'Расписание' },
+  'dept.announcements': { az: 'Elanlar', en: 'Announcements', ru: 'Объявления' },
+  'dept.exams': { az: 'İmtahanlar', en: 'Exams', ru: 'Экзамены' },
+  'dept.courseYear': { az: '-ci kurs', en: 'year', ru: 'курс' },
+  'dept.empty': { az: 'Məlumat yoxdur', en: 'No content', ru: 'Нет данных' },
+  'dept.empty.desc': { az: 'Bu bölmə üçün hələ məlumat əlavə edilməyib.', en: 'No content has been added for this section yet.', ru: 'Для этого раздела пока нет данных.' },
 
   // Events detail
   'events.about': { az: 'Tədbir haqqında', en: 'About the event', ru: 'О мероприятии' },

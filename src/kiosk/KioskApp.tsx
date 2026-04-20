@@ -1,52 +1,167 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Map, CalendarDays, GraduationCap, Info, Clock, ChevronLeft,
-  Home, Search, ArrowRight, Bell, Coffee, Globe, Delete
+  Map, CalendarDays, GraduationCap, Info, Clock, ChevronLeft, ChevronRight,
+  Home, Search, ArrowRight, Bell, Coffee, Globe, Building2, BookOpen, Megaphone, FileText
 } from 'lucide-react';
 import { useKioskData } from '../shared/useKioskData';
 import { useI18n, type Lang } from '../shared/i18n';
-import type { Announcement, Exam, Event as KioskEvent, CafeteriaCategory, InfoContent, KioskSettings } from '../shared/types';
+import type { Announcement, Faculty, Event as KioskEvent, CafeteriaCategory, InfoContent, KioskSettings } from '../shared/types';
 
 const LOCALE_MAP: Record<Lang, string> = { az: 'az-AZ', en: 'en-GB', ru: 'ru-RU' };
 const LANG_LABELS: Record<Lang, string> = { az: 'AZ', en: 'EN', ru: 'RU' };
 
-// --- Virtual Keyboard ---
-const KB_ROWS = [
-  ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
-  ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
-  ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
-  ['Z', 'X', 'C', 'V', 'B', 'N', 'M', '-'],
-];
-const VirtualKeyboard = ({ value, onChange, onSubmit }: { value: string; onChange: (v: string) => void; onSubmit: () => void }) => (
-  <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className="mt-6 select-none">
-    {KB_ROWS.map((row, ri) => (
-      <div key={ri} className="flex justify-center gap-2 mb-2">
-        {row.map(k => (
-          <button key={k} onPointerDown={e => { e.preventDefault(); onChange(value + k); }}
-            className="w-[72px] h-[64px] bg-gray-100 hover:bg-gray-200 active:bg-uni-blue active:text-white rounded-2xl text-2xl font-bold text-gray-700 transition-colors">{k}</button>
-        ))}
-        {ri === 3 && (
-          <button onPointerDown={e => { e.preventDefault(); onChange(value.slice(0, -1)); }}
-            className="w-[100px] h-[64px] bg-red-50 hover:bg-red-100 active:bg-red-500 active:text-white rounded-2xl flex items-center justify-center transition-colors text-red-400">
-            <Delete size={28} />
+// --- Faculty Browser View ---
+const FacultyBrowserView = ({ faculties }: { faculties: Faculty[] }) => {
+  const { t } = useI18n();
+  const [selectedFacultyId, setSelectedFacultyId] = useState<number | null>(null);
+  const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null);
+  const [contentTab, setContentTab] = useState<'schedule' | 'announcement' | 'exam'>('schedule');
+  const [courseYear, setCourseYear] = useState<number>(1);
+
+  const faculty = faculties.find(f => f.id === selectedFacultyId);
+  const department = faculty?.departments.find(d => d.id === selectedDeptId);
+
+  // Level 1: Faculty list
+  if (!faculty) {
+    return (
+      <div className="flex-1 pt-40 pb-12 px-12 overflow-y-auto">
+        <div className="max-w-6xl mx-auto">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-12">
+            <div className="w-28 h-28 bg-uni-gold/10 rounded-[2rem] flex items-center justify-center mx-auto mb-6">
+              <Building2 size={56} className="text-uni-gold" />
+            </div>
+            <h3 className="text-5xl font-bold text-uni-blue mb-4">{t('faculty.title') as string}</h3>
+            <p className="text-2xl text-gray-500">{t('faculty.select') as string}</p>
+          </motion.div>
+          <div className="grid grid-cols-2 gap-6">
+            {faculties.map((f, i) => (
+              <motion.button key={f.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}
+                whileTap={{ scale: 0.98 }} onClick={() => setSelectedFacultyId(f.id)}
+                className="bg-white rounded-[2rem] p-8 shadow-sm border border-gray-100 hover:shadow-lg transition-all text-left flex items-center gap-6 group">
+                <div className="w-20 h-20 bg-blue-50 rounded-2xl flex items-center justify-center text-uni-blue shrink-0 group-hover:bg-uni-blue group-hover:text-white transition-colors">
+                  <GraduationCap size={40} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-2xl font-bold text-gray-900 mb-1 leading-tight">{f.name}</h4>
+                  <p className="text-lg text-gray-500">{f.departments.length} {t('faculty.deptCount') as string}</p>
+                </div>
+                <ChevronRight size={32} className="text-gray-300 group-hover:text-uni-blue transition-colors shrink-0" />
+              </motion.button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Level 2: Department list
+  if (!department) {
+    return (
+      <div className="flex-1 pt-40 pb-12 px-12 overflow-y-auto">
+        <div className="max-w-6xl mx-auto">
+          <button onClick={() => setSelectedFacultyId(null)}
+            className="flex items-center gap-3 text-xl font-bold text-uni-blue bg-white px-6 py-3 rounded-full shadow-sm mb-8 hover:bg-gray-50 transition-colors w-fit border border-gray-100">
+            <ChevronLeft size={24} /> {t('faculty.back') as string}
           </button>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-10">
+            <h3 className="text-4xl font-bold text-uni-blue mb-2">{faculty.name}</h3>
+            <p className="text-xl text-gray-500">{t('faculty.selectDept') as string}</p>
+          </motion.div>
+          <div className="grid grid-cols-1 gap-5">
+            {faculty.departments.map((d, i) => (
+              <motion.button key={d.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.08 }}
+                whileTap={{ scale: 0.99 }} onClick={() => { setSelectedDeptId(d.id); setContentTab('schedule'); setCourseYear(1); }}
+                className="bg-white rounded-[2rem] p-8 shadow-sm border border-gray-100 hover:shadow-lg transition-all text-left flex items-center gap-6 group">
+                <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 shrink-0 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                  <BookOpen size={32} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-2xl font-bold text-gray-900 leading-tight">{d.name}</h4>
+                </div>
+                <ChevronRight size={28} className="text-gray-300 group-hover:text-indigo-600 transition-colors shrink-0" />
+              </motion.button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Level 3: Department content
+  const tabs: { key: 'schedule' | 'announcement' | 'exam'; label: string; icon: React.ReactNode }[] = [
+    { key: 'schedule', label: t('dept.schedules') as string, icon: <Clock size={24} /> },
+    { key: 'announcement', label: t('dept.announcements') as string, icon: <Megaphone size={24} /> },
+    { key: 'exam', label: t('dept.exams') as string, icon: <FileText size={24} /> },
+  ];
+
+  const contentForTab = department.content.filter(c => c.type === contentTab);
+  const scheduleContent = contentTab === 'schedule' ? contentForTab.filter(c => c.course_year === courseYear) : contentForTab;
+
+  return (
+    <div className="flex-1 pt-40 pb-12 px-12 overflow-y-auto">
+      <div className="max-w-6xl mx-auto">
+        <button onClick={() => setSelectedDeptId(null)}
+          className="flex items-center gap-3 text-xl font-bold text-uni-blue bg-white px-6 py-3 rounded-full shadow-sm mb-6 hover:bg-gray-50 transition-colors w-fit border border-gray-100">
+          <ChevronLeft size={24} /> {faculty.name}
+        </button>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
+          <h3 className="text-4xl font-bold text-uni-blue mb-2">{department.name}</h3>
+        </motion.div>
+
+        {/* Content type tabs */}
+        <div className="flex gap-3 mb-8">
+          {tabs.map(tb => (
+            <button key={tb.key} onClick={() => { setContentTab(tb.key); setCourseYear(1); }}
+              className={`flex items-center gap-3 px-8 py-4 rounded-full text-xl font-bold transition-all ${contentTab === tb.key ? 'bg-uni-blue text-white shadow-lg' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}>
+              {tb.icon} {tb.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Course year selector for schedules */}
+        {contentTab === 'schedule' && (
+          <div className="flex gap-3 mb-8">
+            {[1, 2, 3, 4].map(y => (
+              <button key={y} onClick={() => setCourseYear(y)}
+                className={`w-16 h-16 rounded-2xl text-2xl font-bold transition-all ${courseYear === y ? 'bg-uni-gold text-white shadow-lg' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}>
+                {y}
+              </button>
+            ))}
+            <span className="flex items-center text-xl text-gray-400 ml-2">{t('dept.courseYear') as string}</span>
+          </div>
+        )}
+
+        {/* Content display */}
+        {scheduleContent.length > 0 ? (
+          <div className="space-y-6">
+            {scheduleContent.map((item, i) => (
+              <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}
+                className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow">
+                {item.image_url && (
+                  <img src={item.image_url} alt={item.title} className="w-full max-h-[600px] object-contain bg-gray-50" referrerPolicy="no-referrer" />
+                )}
+                <div className="p-8">
+                  <h4 className="text-3xl font-bold text-gray-900 mb-3">{item.title}</h4>
+                  {item.description && <p className="text-xl text-gray-600 leading-relaxed">{item.description}</p>}
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-white rounded-[3rem] p-16 text-center shadow-sm border border-gray-100 flex flex-col items-center mt-6">
+            <div className="w-24 h-24 bg-gray-50 rounded-3xl flex items-center justify-center mb-8">
+              <Search size={48} className="text-gray-300" />
+            </div>
+            <h3 className="text-3xl font-bold text-uni-blue mb-3">{t('dept.empty') as string}</h3>
+            <p className="text-xl text-gray-500">{t('dept.empty.desc') as string}</p>
+          </div>
         )}
       </div>
-    ))}
-    <div className="flex justify-center gap-2 mt-1">
-      <button onPointerDown={e => { e.preventDefault(); onChange(''); }}
-        className="px-8 h-[60px] bg-gray-200 hover:bg-gray-300 rounded-2xl text-xl font-bold text-gray-500 transition-colors">Sil</button>
-      <button onPointerDown={e => { e.preventDefault(); onChange(value + ' '); }}
-        className="w-[320px] h-[60px] bg-gray-100 hover:bg-gray-200 rounded-2xl text-xl font-bold text-gray-500 transition-colors">Boşluq</button>
-      <button onPointerDown={e => { e.preventDefault(); onSubmit(); }}
-        className="px-10 h-[60px] bg-uni-blue hover:bg-blue-900 text-white rounded-2xl text-xl font-bold transition-colors flex items-center gap-2"><Search size={22} /> Axtar</button>
     </div>
-  </motion.div>
-);
-
-// --- Screensaver ---
-const Screensaver = ({ onWake }: { onWake: () => void }) => {
+  );
+};
+const Screensaver = ({ onWake, weather }: { onWake: () => void; weather: WeatherData }) => {
   const [time, setTime] = useState(new Date());
   const { t, lang } = useI18n();
   const locale = LOCALE_MAP[lang];
@@ -62,9 +177,18 @@ const Screensaver = ({ onWake }: { onWake: () => void }) => {
         <GraduationCap size={100} className="text-uni-gold mb-8 drop-shadow-2xl" />
         <h1 className="text-7xl font-serif font-semibold mb-4 tracking-tight text-white text-shadow-md">{t('uni.name') as string}</h1>
         <p className="text-3xl text-blue-200 mb-16 font-light tracking-wide uppercase">{t('kiosk.title') as string}</p>
-        <div className="text-[10rem] font-light tracking-tighter mb-20 text-white text-shadow-md leading-none">
+        <div className="text-[10rem] font-light tracking-tighter text-white text-shadow-md leading-none">
           {time.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
         </div>
+        {weather && (
+          <div className="flex items-center gap-4 mt-6 mb-14">
+            <WeatherIcon code={weather.code} size={40} />
+            <span className="text-4xl font-light text-white/90">{weather.temp}°C</span>
+            <span className="text-2xl text-blue-200/70 font-light">·</span>
+            <span className="text-2xl text-blue-200/70 font-light tracking-wide">Bakı</span>
+          </div>
+        )}
+        {!weather && <div className="mb-20" />}
         <motion.div animate={{ opacity: [0.6, 1, 0.6], scale: [0.98, 1.02, 0.98] }} transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
           className="glass-panel-dark px-10 py-5 rounded-full flex items-center gap-4">
           <span className="text-3xl font-medium text-white tracking-wide">{t('kiosk.touch') as string}</span>
@@ -75,7 +199,7 @@ const Screensaver = ({ onWake }: { onWake: () => void }) => {
 };
 
 // --- Header ---
-const Header = ({ title, onHome, onBack }: { title: string; onHome: () => void; onBack?: () => void }) => {
+const Header = ({ title, onHome, onBack, weather }: { title: string; onHome: () => void; onBack?: () => void; weather: WeatherData }) => {
   const [time, setTime] = useState(new Date());
   const { lang, setLang, t } = useI18n();
   const locale = LOCALE_MAP[lang];
@@ -102,9 +226,25 @@ const Header = ({ title, onHome, onBack }: { title: string; onHome: () => void; 
         )}
       </div>
       <div className="flex items-center gap-6 pointer-events-auto">
-        <div className="glass-panel px-8 py-4 rounded-3xl text-right">
-          <div className="text-3xl font-bold text-uni-blue">{time.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}</div>
-          <div className="text-gray-600 font-medium text-lg">{time.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+        <div className="glass-panel px-8 py-5 rounded-[2rem] flex items-center gap-6 shadow-lg">
+          {/* Clock */}
+          <div className="text-right">
+            <div className="text-4xl font-bold text-uni-blue tracking-tight leading-none">{time.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}</div>
+            <div className="text-gray-500 font-medium text-base mt-1">{time.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+          </div>
+          {/* Weather divider + widget */}
+          {weather && (
+            <>
+              <div className="w-px h-12 bg-gray-200" />
+              <div className="flex items-center gap-3">
+                <WeatherIcon code={weather.code} size={32} />
+                <div>
+                  <div className="text-2xl font-bold text-uni-blue leading-none">{weather.temp}°</div>
+                  <div className="text-xs text-gray-400 font-medium flex items-center gap-0.5 mt-0.5"><MapPin size={10} />Bakı</div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
         <div className="relative">
           <button onClick={() => setShowLangPicker(!showLangPicker)}
@@ -189,14 +329,14 @@ const HomeMenu = ({ onNavigate, announcements, settings }: { onNavigate: (v: str
       )}
 
       <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-3 grid-rows-3 gap-6 w-full max-w-7xl flex-1 min-h-0">
-        <motion.button variants={itemVariants} whileTap={{ scale: 0.98 }} onClick={() => onNavigate('exams')}
+        <motion.button variants={itemVariants} whileTap={{ scale: 0.98 }} onClick={() => onNavigate('faculties')}
           className="col-span-2 row-span-2 rounded-[2.5rem] bg-uni-blue p-10 relative overflow-hidden group shadow-xl text-left flex flex-col">
-          <div className="absolute -right-10 -top-10 opacity-10 group-hover:scale-110 transition-transform duration-500 text-uni-gold"><Clock size={300} /></div>
+          <div className="absolute -right-10 -top-10 opacity-10 group-hover:scale-110 transition-transform duration-500 text-uni-gold"><Building2 size={300} /></div>
           <div className="absolute bottom-0 right-0 p-10 opacity-20"><GraduationCap size={200} className="text-white" /></div>
-          <div className="bg-white/10 w-20 h-20 rounded-2xl flex items-center justify-center mb-auto text-uni-gold backdrop-blur-md"><Clock size={40} /></div>
+          <div className="bg-white/10 w-20 h-20 rounded-2xl flex items-center justify-center mb-auto text-uni-gold backdrop-blur-md"><Building2 size={40} /></div>
           <div className="relative z-10 mt-8">
-            <h3 className="text-5xl font-bold text-white mb-3 text-shadow-md">{t('nav.exams') as string}</h3>
-            <p className="text-2xl text-blue-200 max-w-md">{t('nav.exams.desc') as string}</p>
+            <h3 className="text-5xl font-bold text-white mb-3 text-shadow-md">{t('nav.faculties') as string}</h3>
+            <p className="text-2xl text-blue-200 max-w-md">{t('nav.faculties.desc') as string}</p>
           </div>
         </motion.button>
 
@@ -260,74 +400,6 @@ const MapView = () => {
             <button key={place} className="glass-panel px-8 py-4 rounded-full text-xl font-bold text-uni-blue hover:bg-white transition-colors shadow-lg">{place}</button>
           ))}
         </div>
-      </div>
-    </div>
-  );
-};
-
-// --- Exams View ---
-const ExamsView = ({ exams }: { exams: Exam[] }) => {
-  const { t } = useI18n();
-  const [groupNumber, setGroupNumber] = useState('');
-  const [searchedGroup, setSearchedGroup] = useState<string | null>(null);
-
-  const handleSearch = () => { if (groupNumber.trim().length > 0) setSearchedGroup(groupNumber.trim().toUpperCase()); };
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') handleSearch(); };
-  const filteredExams = searchedGroup ? exams.filter(ex => ex.group_number.includes(searchedGroup) || searchedGroup.includes(ex.group_number)) : [];
-
-  if (!searchedGroup) {
-    return (
-      <div className="flex-1 pt-40 pb-12 px-12 flex flex-col items-center justify-center">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-16 rounded-[3rem] shadow-xl max-w-3xl w-full text-center relative overflow-hidden">
-          <div className="w-32 h-32 bg-uni-gold/10 rounded-[2rem] flex items-center justify-center mx-auto mb-10"><Clock size={64} className="text-uni-gold" /></div>
-          <h3 className="text-5xl font-bold text-uni-blue mb-6">{t('exams.title') as string}</h3>
-          <p className="text-2xl text-gray-500 mb-12 leading-relaxed">{t('exams.enter.group') as string}</p>
-          <div className="glass-panel border-gray-200 border-2 rounded-[2rem] p-4 flex gap-4 mb-6 shadow-sm border-uni-blue transition-colors">
-            <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center text-gray-500"><Search size={32} /></div>
-            <input type="text" readOnly value={groupNumber}
-              placeholder={t('exams.placeholder') as string} className="flex-1 bg-transparent text-4xl text-uni-blue placeholder-gray-400 outline-none px-4 font-bold text-center caret-transparent" />
-          </div>
-          <VirtualKeyboard value={groupNumber} onChange={setGroupNumber} onSubmit={handleSearch} />
-        </motion.div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex-1 pt-40 pb-12 px-12 overflow-y-auto">
-      <div className="max-w-5xl mx-auto">
-        <div className="glass-panel rounded-[2rem] p-6 flex justify-between items-center mb-10 shadow-lg px-10 border border-gray-100">
-          <div className="text-3xl font-bold text-uni-blue">{t('exams.group') as string}: <span className="text-uni-gold">{searchedGroup}</span></div>
-          <button onClick={() => setSearchedGroup(null)} className="px-8 py-4 bg-gray-100 hover:bg-gray-200 text-uni-blue rounded-full text-xl font-bold transition-colors">{t('exams.other.group') as string}</button>
-        </div>
-        {filteredExams.length > 0 ? (
-          <div className="space-y-6">
-            {filteredExams.map((exam, i) => (
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} key={exam.id}
-                className="bg-white rounded-[2rem] p-8 shadow-sm border border-gray-100 flex items-center gap-8 hover:shadow-md transition-shadow cursor-pointer">
-                <div className="bg-blue-50 rounded-2xl p-6 flex flex-col items-center justify-center min-w-[140px]">
-                  <span className="text-5xl font-bold text-uni-blue leading-none mb-1">{exam.exam_date}</span>
-                  <span className="text-xl font-medium text-blue-600 uppercase tracking-wider">{exam.exam_month}</span>
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-3xl font-bold text-gray-900 mb-2">{exam.subject}</h3>
-                  <p className="text-xl text-gray-500 mb-4">{exam.faculty} &bull; {t('exams.group') as string} {exam.group_number}</p>
-                  <div className="flex items-center gap-6 text-lg font-medium text-gray-600">
-                    <span className="flex items-center gap-2"><Clock size={24} className="text-uni-gold" /> {exam.time_slot}</span>
-                    <span className="flex items-center gap-2"><Map size={24} className="text-uni-blue" /> {exam.room}</span>
-                  </div>
-                </div>
-                <div className="w-16 h-16 rounded-full bg-gray-50 flex items-center justify-center text-gray-400"><ArrowRight size={32} /></div>
-              </motion.div>
-            ))}
-          </div>
-        ) : (
-          <div className="bg-white rounded-[3rem] p-16 text-center shadow-sm border border-gray-100 flex flex-col items-center mt-10">
-            <div className="w-24 h-24 bg-gray-50 rounded-3xl flex items-center justify-center mb-8"><Search size={48} className="text-gray-300" /></div>
-            <h3 className="text-4xl font-bold text-uni-blue mb-4">{t('exams.not.found') as string}</h3>
-            <p className="text-2xl text-gray-500 max-w-lg">&ldquo;{searchedGroup}&rdquo; {t('exams.not.found.desc') as string}</p>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -631,6 +703,7 @@ export default function KioskApp() {
   const [currentView, setCurrentView] = useState('home');
   const { data, loading } = useKioskData();
   const { t, setLang } = useI18n();
+  const weather = useBakuWeather();
   const IDLE_TIMEOUT = 30000;
 
   useEffect(() => {
@@ -665,7 +738,7 @@ export default function KioskApp() {
   const renderView = () => {
     switch (currentView) {
       case 'map': return <MapView />;
-      case 'exams': return <ExamsView exams={data.exams} />;
+      case 'faculties': return <FacultyBrowserView faculties={data.faculties} />;
       case 'events': return <EventsView events={data.events} />;
       case 'cafeteria': return <CafeteriaView menu={data.cafeteria} />;
       case 'announcements': return <AnnouncementsView announcements={data.announcements} />;
@@ -676,7 +749,7 @@ export default function KioskApp() {
 
   const getViewTitle = () => {
     const titleKeys: Record<string, string> = {
-      map: 'title.map', exams: 'title.exams', events: 'title.events',
+      map: 'title.map', faculties: 'title.faculties', events: 'title.events',
       cafeteria: 'title.cafeteria', info: 'title.info', announcements: 'title.announcements'
     };
     const key = titleKeys[currentView];
@@ -688,10 +761,10 @@ export default function KioskApp() {
       <div className="ambient-bg"></div>
       <SecretExitZone />
       {data.settings?.kiosk_paused && <MaintenanceScreen />}
-      <AnimatePresence>{isIdle && !data.settings?.kiosk_paused && <Screensaver onWake={resetIdleTimer} />}</AnimatePresence>
+      <AnimatePresence>{isIdle && !data.settings?.kiosk_paused && <Screensaver onWake={resetIdleTimer} weather={weather} />}</AnimatePresence>
       {!isIdle && (
         <>
-          <Header title={getViewTitle()} onHome={() => setCurrentView('home')} onBack={currentView !== 'home' ? () => setCurrentView('home') : undefined} />
+          <Header title={getViewTitle()} onHome={() => setCurrentView('home')} onBack={currentView !== 'home' ? () => setCurrentView('home') : undefined} weather={weather} />
           <main className="flex-1 flex flex-col relative">
             <AnimatePresence mode="wait">
               <motion.div key={currentView} initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.02 }}

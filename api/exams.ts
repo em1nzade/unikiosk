@@ -26,42 +26,103 @@ async function verifyAdmin(req: VercelRequest): Promise<boolean> {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleCors(req, res)) return;
   const sql = neon(process.env.DATABASE_URL!);
+  const entity = req.query.entity as string | undefined;
 
   try {
-    if (req.method === 'GET') {
-      const { group } = req.query;
-      if (group) {
-        const g = String(group);
-        const rows = await sql`SELECT * FROM exams WHERE active = true AND group_number = ${g} ORDER BY exam_date ASC`;
-        return res.json(rows);
-      }
-      const rows = await sql`SELECT * FROM exams WHERE active = true ORDER BY exam_date ASC, time_slot ASC`;
-      return res.json(rows);
+    // Public GET: return full tree for kiosk
+    if (req.method === 'GET' && !entity) {
+      const [faculties, departments, content] = await Promise.all([
+        sql`SELECT * FROM faculties WHERE active = true ORDER BY sort_order ASC`,
+        sql`SELECT * FROM departments WHERE active = true ORDER BY sort_order ASC`,
+        sql`SELECT * FROM dept_content WHERE active = true ORDER BY sort_order ASC, created_at DESC`,
+      ]);
+      const tree = faculties.map((f: any) => ({
+        ...f,
+        departments: departments.filter((d: any) => d.faculty_id === f.id).map((d: any) => ({
+          ...d,
+          content: content.filter((c: any) => c.department_id === d.id),
+        })),
+      }));
+      return res.json(tree);
     }
 
+    // Admin CRUD below
     if (!(await verifyAdmin(req))) return res.status(401).json({ error: 'Unauthorized' });
 
-    if (req.method === 'POST') {
-      const { subject, faculty, group_number, room, time_slot, exam_date, exam_month } = req.body;
-      if (!subject || !faculty || !group_number || !room || !time_slot || !exam_date || !exam_month) {
-        return res.status(400).json({ error: 'All fields required' });
+    // --- Faculties ---
+    if (entity === 'faculty') {
+      if (req.method === 'POST') {
+        const { name, sort_order } = req.body;
+        if (!name) return res.status(400).json({ error: 'Name required' });
+        const rows = await sql`INSERT INTO faculties (name, sort_order) VALUES (${name}, ${sort_order ?? 0}) RETURNING *`;
+        return res.status(201).json(rows[0]);
       }
-      const rows = await sql`INSERT INTO exams (subject, faculty, group_number, room, time_slot, exam_date, exam_month) VALUES (${subject}, ${faculty}, ${group_number}, ${room}, ${time_slot}, ${exam_date}, ${exam_month}) RETURNING *`;
-      return res.status(201).json(rows[0]);
+      if (req.method === 'PUT') {
+        const { id, name, sort_order, active } = req.body;
+        if (!id) return res.status(400).json({ error: 'ID required' });
+        const rows = await sql`UPDATE faculties SET name = COALESCE(${name ?? null}, name), sort_order = COALESCE(${sort_order ?? null}, sort_order), active = COALESCE(${active ?? null}, active) WHERE id = ${id} RETURNING *`;
+        return res.json(rows[0]);
+      }
+      if (req.method === 'DELETE') {
+        const { id } = req.body;
+        if (!id) return res.status(400).json({ error: 'ID required' });
+        await sql`DELETE FROM faculties WHERE id = ${id}`;
+        return res.json({ success: true });
+      }
     }
 
-    if (req.method === 'PUT') {
-      const { id, ...fields } = req.body;
-      if (!id) return res.status(400).json({ error: 'ID required' });
-      const rows = await sql`UPDATE exams SET subject = COALESCE(${fields.subject ?? null}, subject), faculty = COALESCE(${fields.faculty ?? null}, faculty), group_number = COALESCE(${fields.group_number ?? null}, group_number), room = COALESCE(${fields.room ?? null}, room), time_slot = COALESCE(${fields.time_slot ?? null}, time_slot), exam_date = COALESCE(${fields.exam_date ?? null}, exam_date), exam_month = COALESCE(${fields.exam_month ?? null}, exam_month), active = COALESCE(${fields.active ?? null}, active), updated_at = NOW() WHERE id = ${id} RETURNING *`;
-      return res.json(rows[0]);
+    // --- Departments ---
+    if (entity === 'department') {
+      if (req.method === 'POST') {
+        const { faculty_id, name, sort_order } = req.body;
+        if (!faculty_id || !name) return res.status(400).json({ error: 'faculty_id and name required' });
+        const rows = await sql`INSERT INTO departments (faculty_id, name, sort_order) VALUES (${faculty_id}, ${name}, ${sort_order ?? 0}) RETURNING *`;
+        return res.status(201).json(rows[0]);
+      }
+      if (req.method === 'PUT') {
+        const { id, name, sort_order, active } = req.body;
+        if (!id) return res.status(400).json({ error: 'ID required' });
+        const rows = await sql`UPDATE departments SET name = COALESCE(${name ?? null}, name), sort_order = COALESCE(${sort_order ?? null}, sort_order), active = COALESCE(${active ?? null}, active) WHERE id = ${id} RETURNING *`;
+        return res.json(rows[0]);
+      }
+      if (req.method === 'DELETE') {
+        const { id } = req.body;
+        if (!id) return res.status(400).json({ error: 'ID required' });
+        await sql`DELETE FROM departments WHERE id = ${id}`;
+        return res.json({ success: true });
+      }
     }
 
-    if (req.method === 'DELETE') {
-      const { id } = req.body;
-      if (!id) return res.status(400).json({ error: 'ID required' });
-      await sql`DELETE FROM exams WHERE id = ${id}`;
-      return res.json({ success: true });
+    // --- Content (schedule/announcement/exam) ---
+    if (entity === 'content') {
+      if (req.method === 'POST') {
+        const { department_id, type, course_year, title, description, image_url, extra, sort_order } = req.body;
+        if (!department_id || !type || !title) return res.status(400).json({ error: 'department_id, type, title required' });
+        const rows = await sql`INSERT INTO dept_content (department_id, type, course_year, title, description, image_url, extra, sort_order)
+          VALUES (${department_id}, ${type}, ${course_year ?? null}, ${title}, ${description ?? null}, ${image_url ?? null}, ${JSON.stringify(extra ?? {})}, ${sort_order ?? 0}) RETURNING *`;
+        return res.status(201).json(rows[0]);
+      }
+      if (req.method === 'PUT') {
+        const { id, title, description, image_url, course_year, extra, sort_order, active } = req.body;
+        if (!id) return res.status(400).json({ error: 'ID required' });
+        const rows = await sql`UPDATE dept_content SET
+          title = COALESCE(${title ?? null}, title),
+          description = COALESCE(${description ?? null}, description),
+          image_url = COALESCE(${image_url ?? null}, image_url),
+          course_year = COALESCE(${course_year ?? null}, course_year),
+          extra = COALESCE(${extra ? JSON.stringify(extra) : null}, extra),
+          sort_order = COALESCE(${sort_order ?? null}, sort_order),
+          active = COALESCE(${active ?? null}, active),
+          updated_at = NOW()
+          WHERE id = ${id} RETURNING *`;
+        return res.json(rows[0]);
+      }
+      if (req.method === 'DELETE') {
+        const { id } = req.body;
+        if (!id) return res.status(400).json({ error: 'ID required' });
+        await sql`DELETE FROM dept_content WHERE id = ${id}`;
+        return res.json({ success: true });
+      }
     }
 
     return res.status(405).json({ error: 'Method not allowed' });

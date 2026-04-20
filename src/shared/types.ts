@@ -8,16 +8,34 @@ export interface Announcement {
   active: boolean;
 }
 
-export interface Exam {
+export interface DeptContent {
   id: number;
-  subject: string;
-  faculty: string;
-  group_number: string;
-  room: string;
-  time_slot: string;
-  exam_date: string;
-  exam_month: string;
+  department_id: number;
+  type: 'schedule' | 'announcement' | 'exam';
+  course_year: number | null;
+  title: string;
+  description: string | null;
+  image_url: string | null;
+  extra: Record<string, any>;
+  sort_order: number;
   active: boolean;
+}
+
+export interface Department {
+  id: number;
+  faculty_id: number;
+  name: string;
+  sort_order: number;
+  active: boolean;
+  content: DeptContent[];
+}
+
+export interface Faculty {
+  id: number;
+  name: string;
+  sort_order: number;
+  active: boolean;
+  departments: Department[];
 }
 
 export interface Event {
@@ -58,7 +76,7 @@ export interface InfoContent {
 
 export interface KioskData {
   announcements: Announcement[];
-  exams: Exam[];
+  faculties: Faculty[];
   events: Event[];
   cafeteria: CafeteriaCategory[];
   info: InfoContent[];

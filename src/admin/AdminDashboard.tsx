@@ -1,18 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import { adminFetch, apiFetch } from '../shared/api';
-import type { Announcement, Exam, Event as KioskEvent, CafeteriaCategory, InfoContent, KioskSettings } from '../shared/types';
+import type { Announcement, Faculty, Department, DeptContent, Event as KioskEvent, CafeteriaCategory, InfoContent, KioskSettings } from '../shared/types';
 import {
-  LogOut, Bell, Clock, CalendarDays, Coffee, Info, Plus, Trash2, Edit3, Save, X, ChevronRight,
+  LogOut, Bell, Clock, CalendarDays, Coffee, Info, Plus, Trash2, Edit3, Save, X, ChevronRight, ChevronLeft,
   GraduationCap, LayoutDashboard, Loader2, Users, Shield, ShieldCheck, Settings, Check, ChevronDown, Monitor
 } from 'lucide-react';
 
-type Tab = 'dashboard' | 'announcements' | 'exams' | 'events' | 'cafeteria' | 'info' | 'users' | 'settings' | 'devices';
+type Tab = 'dashboard' | 'announcements' | 'faculties' | 'events' | 'cafeteria' | 'info' | 'users' | 'settings' | 'devices';
 
 const ALL_PERMISSIONS: { key: string; label: string }[] = [
   { key: 'dashboard', label: 'Panel' },
   { key: 'announcements', label: 'Elanlar' },
-  { key: 'exams', label: 'İmtahanlar' },
+  { key: 'faculties', label: 'Fakültələr' },
   { key: 'events', label: 'Tədbirlər' },
   { key: 'cafeteria', label: 'Yeməkxana' },
   { key: 'info', label: 'Məlumat' },
@@ -161,7 +161,7 @@ export default function AdminDashboard() {
   const { token, user: currentUser, logout, loginTime } = useAuth();
   const [tab, setTab] = useState<Tab>('dashboard');
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-  const [exams, setExams] = useState<Exam[]>([]);
+  const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [events, setEvents] = useState<KioskEvent[]>([]);
   const [cafeteria, setCafeteria] = useState<CafeteriaCategory[]>([]);
   const [info, setInfo] = useState<InfoContent[]>([]);
@@ -180,13 +180,13 @@ export default function AdminDashboard() {
     setLoading(true);
     const [a, ex, ev, c, i, s] = await Promise.all([
       apiFetch<Announcement[]>('/announcements'),
-      apiFetch<Exam[]>('/exams'),
+      apiFetch<Faculty[]>('/exams'),
       apiFetch<KioskEvent[]>('/events'),
       apiFetch<CafeteriaCategory[]>('/cafeteria'),
       apiFetch<InfoContent[]>('/info'),
       apiFetch<Record<string, any>>('/settings'),
     ]);
-    setAnnouncements(a); setExams(ex); setEvents(ev); setCafeteria(c); setInfo(i);
+    setAnnouncements(a); setFaculties(ex); setEvents(ev); setCafeteria(c); setInfo(i);
     setSettings({
       ticker_enabled: s.ticker_enabled ?? true,
       ticker_mode: s.ticker_mode ?? 'scroll',
@@ -237,7 +237,7 @@ export default function AdminDashboard() {
   const allTabs: { key: Tab; label: string; icon: React.ReactNode; count?: number; perm: string }[] = [
     { key: 'dashboard', label: 'Panel', icon: <LayoutDashboard size={20} />, perm: 'dashboard' },
     { key: 'announcements', label: 'Elanlar', icon: <Bell size={20} />, count: announcements.length, perm: 'announcements' },
-    { key: 'exams', label: 'İmtahanlar', icon: <Clock size={20} />, count: exams.length, perm: 'exams' },
+    { key: 'faculties', label: 'Fakültələr', icon: <Clock size={20} />, count: faculties.length, perm: 'faculties' },
     { key: 'events', label: 'Tədbirlər', icon: <CalendarDays size={20} />, count: events.length, perm: 'events' },
     { key: 'cafeteria', label: 'Yeməkxana', icon: <Coffee size={20} />, perm: 'cafeteria' },
     { key: 'info', label: 'Məlumat', icon: <Info size={20} />, perm: 'info' },
@@ -310,9 +310,9 @@ export default function AdminDashboard() {
           <div className="flex items-center justify-center h-64"><Loader2 size={32} className="animate-spin text-uni-blue" /></div>
         ) : (
           <>
-            {tab === 'dashboard' && <DashboardView announcements={announcements} exams={exams} events={events} onNavigate={setTab} />}
+            {tab === 'dashboard' && <DashboardView announcements={announcements} faculties={faculties} events={events} onNavigate={setTab} />}
             {tab === 'announcements' && <AnnouncementsManager items={announcements} token={token!} onRefresh={loadAll} />}
-            {tab === 'exams' && <ExamsManager items={exams} token={token!} onRefresh={loadAll} />}
+            {tab === 'faculties' && <FacultyManager faculties={faculties} token={token!} onRefresh={loadAll} />}
             {tab === 'events' && <EventsManager items={events} token={token!} onRefresh={loadAll} />}
             {tab === 'cafeteria' && <CafeteriaManager items={cafeteria} token={token!} onRefresh={loadAll} />}
             {tab === 'info' && <InfoManager items={info} token={token!} onRefresh={loadAll} />}
@@ -327,10 +327,10 @@ export default function AdminDashboard() {
 }
 
 // ─── Dashboard ──────────────────────────────────────────
-function DashboardView({ announcements, exams, events, onNavigate }: { announcements: Announcement[]; exams: Exam[]; events: KioskEvent[]; onNavigate: (t: Tab) => void }) {
+function DashboardView({ announcements, faculties, events, onNavigate }: { announcements: Announcement[]; faculties: Faculty[]; events: KioskEvent[]; onNavigate: (t: Tab) => void }) {
   const stats = [
     { label: 'Elanlar', count: announcements.length, icon: <Bell size={24} />, color: 'bg-red-50 text-red-600', tab: 'announcements' as Tab },
-    { label: 'İmtahanlar', count: exams.length, icon: <Clock size={24} />, color: 'bg-blue-50 text-blue-600', tab: 'exams' as Tab },
+    { label: 'Fakültələr', count: faculties.length, icon: <Clock size={24} />, color: 'bg-blue-50 text-blue-600', tab: 'faculties' as Tab },
     { label: 'Tədbirlər', count: events.length, icon: <CalendarDays size={24} />, color: 'bg-green-50 text-green-600', tab: 'events' as Tab },
   ];
   return (
@@ -536,72 +536,204 @@ function AnnouncementsManager({ items, token, onRefresh }: { items: Announcement
   );
 }
 
-// ─── Exams Manager ──────────────────────────────────────
-function ExamsManager({ items, token, onRefresh }: { items: Exam[]; token: string; onRefresh: () => void }) {
-  const [editing, setEditing] = useState<Partial<Exam> | null>(null);
+// ─── Faculty Manager ──────────────────────────────────────
+function FacultyManager({ faculties, token, onRefresh }: { faculties: Faculty[]; token: string; onRefresh: () => void }) {
+  const [selectedFacultyId, setSelectedFacultyId] = useState<number | null>(null);
+  const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null);
+  const [editingFaculty, setEditingFaculty] = useState<Partial<Faculty> | null>(null);
+  const [editingDept, setEditingDept] = useState<Partial<Department> | null>(null);
+  const [editingContent, setEditingContent] = useState<Partial<DeptContent> | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const save = async () => {
+  const selectedFaculty = faculties.find(f => f.id === selectedFacultyId);
+  const selectedDept = selectedFaculty?.departments.find(d => d.id === selectedDeptId);
+
+  const saveFaculty = async () => {
     setSaving(true);
     try {
-      if (editing?.id) {
-        await adminFetch('/exams', token, { method: 'PUT', body: JSON.stringify(editing) });
+      if (editingFaculty?.id) {
+        await adminFetch('/exams?entity=faculty', token, { method: 'PUT', body: JSON.stringify(editingFaculty) });
       } else {
-        await adminFetch('/exams', token, { method: 'POST', body: JSON.stringify(editing) });
+        await adminFetch('/exams?entity=faculty', token, { method: 'POST', body: JSON.stringify(editingFaculty) });
       }
-      setEditing(null); onRefresh();
+      setEditingFaculty(null); onRefresh();
     } finally { setSaving(false); }
   };
 
-  const remove = async (id: number) => {
-    await adminFetch('/exams', token, { method: 'DELETE', body: JSON.stringify({ id }) });
+  const removeFaculty = async (id: number) => {
+    await adminFetch('/exams?entity=faculty', token, { method: 'DELETE', body: JSON.stringify({ id }) });
+    setSelectedFacultyId(null); setSelectedDeptId(null); onRefresh();
+  };
+
+  const saveDept = async () => {
+    setSaving(true);
+    try {
+      const data = { ...editingDept, faculty_id: selectedFacultyId };
+      if (editingDept?.id) {
+        await adminFetch('/exams?entity=department', token, { method: 'PUT', body: JSON.stringify(data) });
+      } else {
+        await adminFetch('/exams?entity=department', token, { method: 'POST', body: JSON.stringify(data) });
+      }
+      setEditingDept(null); onRefresh();
+    } finally { setSaving(false); }
+  };
+
+  const removeDept = async (id: number) => {
+    await adminFetch('/exams?entity=department', token, { method: 'DELETE', body: JSON.stringify({ id }) });
+    setSelectedDeptId(null); onRefresh();
+  };
+
+  const saveContent = async () => {
+    setSaving(true);
+    try {
+      const data = { ...editingContent, department_id: selectedDeptId };
+      if (editingContent?.id) {
+        await adminFetch('/exams?entity=content', token, { method: 'PUT', body: JSON.stringify(data) });
+      } else {
+        await adminFetch('/exams?entity=content', token, { method: 'POST', body: JSON.stringify(data) });
+      }
+      setEditingContent(null); onRefresh();
+    } finally { setSaving(false); }
+  };
+
+  const removeContent = async (id: number) => {
+    await adminFetch('/exams?entity=content', token, { method: 'DELETE', body: JSON.stringify({ id }) });
     onRefresh();
   };
 
+  // Level 3: Department content
+  if (selectedDept) {
+    return (
+      <div>
+        <div className="flex items-center gap-3 mb-6">
+          <button onClick={() => setSelectedDeptId(null)} className="flex items-center gap-1 text-uni-blue hover:underline font-medium">
+            <ChevronLeft size={18} /> {selectedFaculty!.name}
+          </button>
+          <span className="text-gray-400">/</span>
+          <h2 className="text-2xl font-bold text-gray-900">{selectedDept.name}</h2>
+        </div>
+        <button onClick={() => setEditingContent({ type: 'schedule', course_year: 1 })} className="flex items-center gap-2 px-4 py-2.5 bg-uni-blue text-white rounded-xl font-medium hover:bg-blue-900 mb-4"><Plus size={18} /> Yeni məzmun</button>
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-100">
+              <tr>
+                <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">Başlıq</th>
+                <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">Tip</th>
+                <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">Kurs</th>
+                <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">Şəkil</th>
+                <th className="px-6 py-4"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {selectedDept.content.map(c => (
+                <tr key={c.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 font-medium text-gray-900">{c.title}</td>
+                  <td className="px-6 py-4 text-gray-500">
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${c.type === 'schedule' ? 'bg-blue-100 text-blue-700' : c.type === 'exam' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                      {c.type === 'schedule' ? 'Cədvəl' : c.type === 'exam' ? 'İmtahan' : 'Elan'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-gray-500">{c.course_year || '-'}</td>
+                  <td className="px-6 py-4 text-gray-500">{c.image_url ? '✓' : '-'}</td>
+                  <td className="px-6 py-4 flex gap-2 justify-end">
+                    <button onClick={() => setEditingContent(c)} className="p-2 text-gray-400 hover:text-uni-blue"><Edit3 size={18} /></button>
+                    <button onClick={() => removeContent(c.id)} className="p-2 text-gray-400 hover:text-red-600"><Trash2 size={18} /></button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {editingContent && (
+          <FormModal title={editingContent.id ? 'Məzmunu redaktə et' : 'Yeni məzmun'} onClose={() => setEditingContent(null)} onSave={saveContent} saving={saving}>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tip</label>
+              <select value={editingContent.type || 'schedule'} onChange={e => setEditingContent({ ...editingContent, type: e.target.value as any })}
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-uni-blue/20 focus:border-uni-blue transition-colors outline-none">
+                <option value="schedule">Dərs Cədvəli</option>
+                <option value="announcement">Elan</option>
+                <option value="exam">İmtahan</option>
+              </select>
+            </div>
+            <Input label="Başlıq" value={editingContent.title || ''} onChange={v => setEditingContent({ ...editingContent, title: v })} />
+            <Input label="Təsvir" value={editingContent.description || ''} onChange={v => setEditingContent({ ...editingContent, description: v })} />
+            <Input label="Şəkil URL" value={editingContent.image_url || ''} onChange={v => setEditingContent({ ...editingContent, image_url: v })} placeholder="https://..." />
+            {editingContent.type === 'schedule' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Kurs</label>
+                <select value={editingContent.course_year ?? 1} onChange={e => setEditingContent({ ...editingContent, course_year: Number(e.target.value) })}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-uni-blue/20 focus:border-uni-blue transition-colors outline-none">
+                  <option value={1}>1-ci kurs</option>
+                  <option value={2}>2-ci kurs</option>
+                  <option value={3}>3-cü kurs</option>
+                  <option value={4}>4-cü kurs</option>
+                </select>
+              </div>
+            )}
+          </FormModal>
+        )}
+      </div>
+    );
+  }
+
+  // Level 2: Departments of a faculty
+  if (selectedFaculty) {
+    return (
+      <div>
+        <div className="flex items-center gap-3 mb-6">
+          <button onClick={() => setSelectedFacultyId(null)} className="flex items-center gap-1 text-uni-blue hover:underline font-medium">
+            <ChevronLeft size={18} /> Fakültələr
+          </button>
+          <span className="text-gray-400">/</span>
+          <h2 className="text-2xl font-bold text-gray-900">{selectedFaculty.name}</h2>
+          <button onClick={() => removeFaculty(selectedFaculty.id)} className="ml-auto p-2 text-gray-400 hover:text-red-600" title="Fakültəni sil"><Trash2 size={18} /></button>
+        </div>
+        <button onClick={() => setEditingDept({})} className="flex items-center gap-2 px-4 py-2.5 bg-uni-blue text-white rounded-xl font-medium hover:bg-blue-900 mb-4"><Plus size={18} /> Yeni kafedra</button>
+        <div className="space-y-3">
+          {selectedFaculty.departments.map(d => (
+            <div key={d.id} className="bg-white rounded-2xl p-5 border border-gray-100 flex items-center gap-4 hover:shadow-sm transition-shadow">
+              <button onClick={() => setSelectedDeptId(d.id)} className="flex-1 text-left">
+                <h4 className="text-lg font-bold text-gray-900">{d.name}</h4>
+                <p className="text-sm text-gray-500">{d.content.length} məzmun</p>
+              </button>
+              <button onClick={() => setEditingDept(d)} className="p-2 text-gray-400 hover:text-uni-blue"><Edit3 size={18} /></button>
+              <button onClick={() => removeDept(d.id)} className="p-2 text-gray-400 hover:text-red-600"><Trash2 size={18} /></button>
+              <button onClick={() => setSelectedDeptId(d.id)} className="p-2 text-gray-400 hover:text-uni-blue"><ChevronRight size={18} /></button>
+            </div>
+          ))}
+        </div>
+        {editingDept && (
+          <FormModal title={editingDept.id ? 'Kafedranı redaktə et' : 'Yeni kafedra'} onClose={() => setEditingDept(null)} onSave={saveDept} saving={saving}>
+            <Input label="Kafedra adı" value={editingDept.name || ''} onChange={v => setEditingDept({ ...editingDept, name: v })} />
+          </FormModal>
+        )}
+      </div>
+    );
+  }
+
+  // Level 1: Faculty list
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">İmtahanlar</h2>
-        <button onClick={() => setEditing({})} className="flex items-center gap-2 px-4 py-2.5 bg-uni-blue text-white rounded-xl font-medium hover:bg-blue-900"><Plus size={18} /> Yeni imtahan</button>
+        <h2 className="text-2xl font-bold text-gray-900">Fakültələr</h2>
+        <button onClick={() => setEditingFaculty({})} className="flex items-center gap-2 px-4 py-2.5 bg-uni-blue text-white rounded-xl font-medium hover:bg-blue-900"><Plus size={18} /> Yeni fakültə</button>
       </div>
-      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50 border-b border-gray-100">
-            <tr>
-              <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">Fənn</th>
-              <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">Fakültə</th>
-              <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">Qrup</th>
-              <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">Tarix</th>
-              <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">Saat</th>
-              <th className="px-6 py-4"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {items.map(e => (
-              <tr key={e.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 font-medium text-gray-900">{e.subject}</td>
-                <td className="px-6 py-4 text-gray-500">{e.faculty}</td>
-                <td className="px-6 py-4 text-gray-500">{e.group_number}</td>
-                <td className="px-6 py-4 text-gray-500">{e.exam_date} {e.exam_month}</td>
-                <td className="px-6 py-4 text-gray-500">{e.time_slot}</td>
-                <td className="px-6 py-4 flex gap-2 justify-end">
-                  <button onClick={() => setEditing(e)} className="p-2 text-gray-400 hover:text-uni-blue"><Edit3 size={18} /></button>
-                  <button onClick={() => remove(e.id)} className="p-2 text-gray-400 hover:text-red-600"><Trash2 size={18} /></button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="space-y-3">
+        {faculties.map(f => (
+          <div key={f.id} className="bg-white rounded-2xl p-5 border border-gray-100 flex items-center gap-4 hover:shadow-sm transition-shadow">
+            <button onClick={() => setSelectedFacultyId(f.id)} className="flex-1 text-left">
+              <h4 className="text-lg font-bold text-gray-900">{f.name}</h4>
+              <p className="text-sm text-gray-500">{f.departments.length} kafedra</p>
+            </button>
+            <button onClick={() => setEditingFaculty(f)} className="p-2 text-gray-400 hover:text-uni-blue"><Edit3 size={18} /></button>
+            <button onClick={() => removeFaculty(f.id)} className="p-2 text-gray-400 hover:text-red-600"><Trash2 size={18} /></button>
+            <button onClick={() => setSelectedFacultyId(f.id)} className="p-2 text-gray-400 hover:text-uni-blue"><ChevronRight size={18} /></button>
+          </div>
+        ))}
       </div>
-      {editing && (
-        <FormModal title={editing.id ? 'İmtahanı redaktə et' : 'Yeni imtahan'} onClose={() => setEditing(null)} onSave={save} saving={saving}>
-          <Input label="Fənn" value={editing.subject || ''} onChange={v => setEditing({ ...editing, subject: v })} />
-          <Input label="Fakültə" value={editing.faculty || ''} onChange={v => setEditing({ ...editing, faculty: v })} />
-          <Input label="Qrup nömrəsi" value={editing.group_number || ''} onChange={v => setEditing({ ...editing, group_number: v })} />
-          <Input label="Otaq" value={editing.room || ''} onChange={v => setEditing({ ...editing, room: v })} />
-          <Input label="Saat aralığı" value={editing.time_slot || ''} onChange={v => setEditing({ ...editing, time_slot: v })} placeholder="10:00 - 12:00" />
-          <Input label="Gün" value={editing.exam_date || ''} onChange={v => setEditing({ ...editing, exam_date: v })} placeholder="15" />
-          <Input label="Ay" value={editing.exam_month || ''} onChange={v => setEditing({ ...editing, exam_month: v })} placeholder="May" />
+      {editingFaculty && (
+        <FormModal title={editingFaculty.id ? 'Fakültəni redaktə et' : 'Yeni fakültə'} onClose={() => setEditingFaculty(null)} onSave={saveFaculty} saving={saving}>
+          <Input label="Fakültə adı" value={editingFaculty.name || ''} onChange={v => setEditingFaculty({ ...editingFaculty, name: v })} />
         </FormModal>
       )}
     </div>
@@ -927,7 +1059,7 @@ function UsersManager({ items, token, onRefresh }: { items: AdminUser[]; token: 
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-900">İstifadəçilər</h2>
-        <button onClick={() => setEditing({ role: 'admin', permissions: ['dashboard', 'announcements', 'exams', 'events', 'cafeteria', 'info'] })}
+        <button onClick={() => setEditing({ role: 'admin', permissions: ['dashboard', 'announcements', 'faculties', 'events', 'cafeteria', 'info'] })}
           className="flex items-center gap-2 px-4 py-2.5 bg-uni-blue text-white rounded-xl font-medium hover:bg-blue-900">
           <Plus size={18} /> Yeni istifadəçi
         </button>
@@ -1032,7 +1164,7 @@ interface KioskDevice {
 
 const SECTION_OPTIONS = [
   { key: 'announcements', label: 'Elanlar' },
-  { key: 'exams', label: 'İmtahanlar' },
+  { key: 'faculties', label: 'Fakültələr' },
   { key: 'events', label: 'Tədbirlər' },
   { key: 'cafeteria', label: 'Yeməkxana' },
   { key: 'info', label: 'Məlumat' },
