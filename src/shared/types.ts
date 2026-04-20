@@ -71,4 +71,5 @@ export interface KioskSettings {
   ticker_mode: 'scroll' | 'static';
   ticker_pinned_id: number | null;
   default_language: string;
+  kiosk_paused?: boolean;
 }

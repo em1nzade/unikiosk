@@ -7,7 +7,7 @@ function handleCors(req: VercelRequest, res: VercelResponse): boolean {
   if (origin.endsWith('.vercel.app') || origin.startsWith('http://localhost')) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') { res.status(204).end(); return true; }
   return false;
@@ -26,8 +26,50 @@ async function verifyAdmin(req: VercelRequest): Promise<boolean> {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleCors(req, res)) return;
   const sql = neon(process.env.DATABASE_URL!);
+  const action = req.query.action as string | undefined;
 
   try {
+    // ── Device management ──
+    if (action === 'devices') {
+      if (req.method === 'GET') {
+        const rows = await sql`SELECT * FROM kiosk_devices ORDER BY created_at DESC`;
+        return res.json(rows);
+      }
+      if (!(await verifyAdmin(req))) return res.status(401).json({ error: 'Unauthorized' });
+
+      if (req.method === 'POST') {
+        const { device_id, name, floor, location } = req.body || {};
+        if (!device_id) return res.status(400).json({ error: 'device_id required' });
+        const rows = await sql`INSERT INTO kiosk_devices (device_id, name, floor, location)
+          VALUES (${device_id}, ${name || 'Kiosk'}, ${floor || ''}, ${location || ''})
+          ON CONFLICT (device_id) DO UPDATE SET name = COALESCE(NULLIF(${name || ''}, ''), kiosk_devices.name), last_seen = NOW()
+          RETURNING *`;
+        return res.json(rows[0]);
+      }
+
+      if (req.method === 'PUT') {
+        const { id, name, floor, location, active, hidden_sections } = req.body || {};
+        if (!id) return res.status(400).json({ error: 'id required' });
+        const rows = await sql`UPDATE kiosk_devices SET
+          name = COALESCE(${name}, name),
+          floor = COALESCE(${floor}, floor),
+          location = COALESCE(${location}, location),
+          active = COALESCE(${active}, active),
+          hidden_sections = COALESCE(${hidden_sections}, hidden_sections)
+          WHERE id = ${id} RETURNING *`;
+        return res.json(rows[0] || null);
+      }
+
+      if (req.method === 'DELETE') {
+        const id = req.query.id as string;
+        if (!id) return res.status(400).json({ error: 'id required' });
+        await sql`DELETE FROM kiosk_devices WHERE id = ${Number(id)}`;
+        return res.json({ success: true });
+      }
+      return res.status(405).json({ error: 'Method not allowed' });
+    }
+
+    // ── Global settings ──
     if (req.method === 'GET') {
       const rows = await sql`SELECT key, value FROM kiosk_settings`;
       const settings: Record<string, any> = {};

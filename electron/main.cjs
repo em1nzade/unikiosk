@@ -1,5 +1,19 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, net } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
+
+// ── Device ID ───────────────────────────────────────────
+function getDeviceId() {
+  const configPath = path.join(app.getPath('userData'), 'device.json');
+  try {
+    const data = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    if (data.deviceId) return data.deviceId;
+  } catch {}
+  const deviceId = crypto.randomUUID();
+  fs.writeFileSync(configPath, JSON.stringify({ deviceId }), 'utf-8');
+  return deviceId;
+}
 
 // ── Config ──────────────────────────────────────────────
 const REMOTE_URL = 'https://unikiosk.vercel.app';
@@ -123,6 +137,10 @@ ipcMain.handle('verify-pin', (_event, pin) => {
 
 ipcMain.handle('exit-app', () => {
   app.quit();
+});
+
+ipcMain.handle('get-device-id', () => {
+  return getDeviceId();
 });
 
 // ── App lifecycle ───────────────────────────────────────

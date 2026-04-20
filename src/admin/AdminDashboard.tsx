@@ -4,10 +4,10 @@ import { adminFetch, apiFetch } from '../shared/api';
 import type { Announcement, Exam, Event as KioskEvent, CafeteriaCategory, InfoContent, KioskSettings } from '../shared/types';
 import {
   LogOut, Bell, Clock, CalendarDays, Coffee, Info, Plus, Trash2, Edit3, Save, X, ChevronRight,
-  GraduationCap, LayoutDashboard, Loader2, Users, Shield, ShieldCheck, Settings, Check, ChevronDown
+  GraduationCap, LayoutDashboard, Loader2, Users, Shield, ShieldCheck, Settings, Check, ChevronDown, Monitor
 } from 'lucide-react';
 
-type Tab = 'dashboard' | 'announcements' | 'exams' | 'events' | 'cafeteria' | 'info' | 'users' | 'settings';
+type Tab = 'dashboard' | 'announcements' | 'exams' | 'events' | 'cafeteria' | 'info' | 'users' | 'settings' | 'devices';
 
 const ALL_PERMISSIONS: { key: string; label: string }[] = [
   { key: 'dashboard', label: 'Panel' },
@@ -18,6 +18,7 @@ const ALL_PERMISSIONS: { key: string; label: string }[] = [
   { key: 'info', label: 'Məlumat' },
   { key: 'settings', label: 'Tənzimləmələr' },
   { key: 'users', label: 'İstifadəçilər' },
+  { key: 'devices', label: 'Kiosklar' },
 ];
 
 interface AdminUser {
@@ -157,7 +158,7 @@ function TextArea({ label, value, onChange, rows = 3, placeholder }: { label: st
 
 // ─── Main Component ─────────────────────────────────────
 export default function AdminDashboard() {
-  const { token, user: currentUser, logout } = useAuth();
+  const { token, user: currentUser, logout, loginTime } = useAuth();
   const [tab, setTab] = useState<Tab>('dashboard');
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
@@ -167,6 +168,9 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [settings, setSettings] = useState<KioskSettings>({ ticker_enabled: true, ticker_mode: 'scroll', ticker_pinned_id: null, default_language: 'az' });
   const [loading, setLoading] = useState(true);
+  const [killClicks, setKillClicks] = useState(0);
+  const [showKillSwitch, setShowKillSwitch] = useState(false);
+  const killTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const userPerms: string[] = currentUser?.permissions ?? [];
   const isSuperAdmin = currentUser?.role === 'superadmin';
@@ -188,7 +192,13 @@ export default function AdminDashboard() {
       ticker_mode: s.ticker_mode ?? 'scroll',
       ticker_pinned_id: s.ticker_pinned_id ?? null,
       default_language: s.default_language ?? 'az',
+      kiosk_paused: s.kiosk_paused ?? false,
     });
+    // Force-logout check: if force_logout_at is newer than login time, kick out
+    if (s.force_logout_at && loginTime && new Date(s.force_logout_at).getTime() > loginTime && !isSuperAdmin) {
+      logout();
+      return;
+    }
     if (isSuperAdmin || hasPermission('users')) {
       try {
         const u = await adminFetch<AdminUser[]>('/users', token!);
@@ -200,6 +210,30 @@ export default function AdminDashboard() {
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
+  const handleLogoClick = () => {
+    if (!isSuperAdmin) return;
+    setKillClicks(prev => {
+      const next = prev + 1;
+      clearTimeout(killTimerRef.current);
+      if (next >= 3) {
+        setShowKillSwitch(true);
+        return 0;
+      }
+      killTimerRef.current = setTimeout(() => setKillClicks(0), 2000);
+      return next;
+    });
+  };
+
+  const toggleKioskPause = async () => {
+    const newVal = !settings.kiosk_paused;
+    await adminFetch('/settings', token!, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kiosk_paused: newVal }) });
+    setSettings(prev => ({ ...prev, kiosk_paused: newVal }));
+  };
+
+  const terminateAllSessions = async () => {
+    await adminFetch('/settings', token!, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ force_logout_at: new Date().toISOString() }) });
+  };
+
   const allTabs: { key: Tab; label: string; icon: React.ReactNode; count?: number; perm: string }[] = [
     { key: 'dashboard', label: 'Panel', icon: <LayoutDashboard size={20} />, perm: 'dashboard' },
     { key: 'announcements', label: 'Elanlar', icon: <Bell size={20} />, count: announcements.length, perm: 'announcements' },
@@ -209,6 +243,7 @@ export default function AdminDashboard() {
     { key: 'info', label: 'Məlumat', icon: <Info size={20} />, perm: 'info' },
     { key: 'settings', label: 'Tənzimləmələr', icon: <Settings size={20} />, perm: 'settings' },
     { key: 'users', label: 'İstifadəçilər', icon: <Users size={20} />, count: users.length, perm: 'users' },
+    { key: 'devices', label: 'Kiosklar', icon: <Monitor size={20} />, perm: 'devices' },
   ];
 
   const visibleTabs = allTabs.filter(t => hasPermission(t.perm));
@@ -217,10 +252,38 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-gray-50 flex">
       <aside className="w-72 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-6 border-b border-gray-100">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 cursor-default select-none" onClick={handleLogoClick}>
             <div className="w-10 h-10 bg-uni-blue rounded-xl flex items-center justify-center"><GraduationCap size={22} className="text-uni-gold" /></div>
             <div><h1 className="font-bold text-uni-blue text-lg">OYU Kiosk</h1><p className="text-xs text-gray-400">Admin Panel</p></div>
           </div>
+          {showKillSwitch && isSuperAdmin && (
+            <div className="mt-3 space-y-2">
+              <div className="p-3 rounded-xl border border-red-200 bg-red-50">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-red-700">{settings.kiosk_paused ? 'Kiosk DAYANDIRILIB' : 'Kiosk aktiv'}</p>
+                    <p className="text-[10px] text-red-400">Sistemi dayandır/başlat</p>
+                  </div>
+                  <button onClick={toggleKioskPause}
+                    className={"px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-colors " + (settings.kiosk_paused ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700")}>
+                    {settings.kiosk_paused ? 'BAŞLAT' : 'DAYANDÍR'}
+                  </button>
+                </div>
+              </div>
+              <div className="p-3 rounded-xl border border-amber-200 bg-amber-50">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-amber-700">Sessiyalar</p>
+                    <p className="text-[10px] text-amber-500">Bütün admin sessiyalarını bitir</p>
+                  </div>
+                  <button onClick={terminateAllSessions}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 transition-colors">
+                    TERMINATE
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
         <nav className="flex-1 p-4 space-y-1">
           {visibleTabs.map(t => (
@@ -255,6 +318,7 @@ export default function AdminDashboard() {
             {tab === 'info' && <InfoManager items={info} token={token!} onRefresh={loadAll} />}
             {tab === 'settings' && <SettingsManager settings={settings} announcements={announcements} token={token!} onRefresh={loadAll} />}
             {tab === 'users' && <UsersManager items={users} token={token!} onRefresh={loadAll} />}
+            {tab === 'devices' && <DevicesManager token={token!} />}
           </>
         )}
       </main>
@@ -947,6 +1011,180 @@ function UsersManager({ items, token, onRefresh }: { items: AdminUser[]; token: 
               </div>
             </div>
           )}
+        </FormModal>
+      )}
+    </div>
+  );
+}
+
+/* ─── Devices Manager ────────────────────────────────── */
+interface KioskDevice {
+  id: number;
+  device_id: string;
+  name: string;
+  floor: string;
+  location: string;
+  active: boolean;
+  last_seen: string | null;
+  hidden_sections: string[];
+  created_at: string;
+}
+
+const SECTION_OPTIONS = [
+  { key: 'announcements', label: 'Elanlar' },
+  { key: 'exams', label: 'İmtahanlar' },
+  { key: 'events', label: 'Tədbirlər' },
+  { key: 'cafeteria', label: 'Yeməkxana' },
+  { key: 'info', label: 'Məlumat' },
+];
+
+function DevicesManager({ token }: { token: string }) {
+  const [devices, setDevices] = useState<KioskDevice[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<KioskDevice | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await adminFetch('/settings?action=devices', token);
+      const data = await res.json();
+      setDevices(data);
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, [token]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const save = async () => {
+    if (!editing) return;
+    setSaving(true);
+    await adminFetch('/settings?action=devices', token, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: editing.id,
+        name: editing.name,
+        floor: editing.floor,
+        location: editing.location,
+        active: editing.active,
+        hidden_sections: editing.hidden_sections,
+      }),
+    });
+    setSaving(false);
+    setEditing(null);
+    load();
+  };
+
+  const remove = async (id: number) => {
+    if (!confirm('Bu cihazı silmək istəyirsiniz?')) return;
+    await adminFetch('/settings?action=devices', token, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    load();
+  };
+
+  const isOnline = (lastSeen: string | null) => {
+    if (!lastSeen) return false;
+    return Date.now() - new Date(lastSeen).getTime() < 60000;
+  };
+
+  const toggleSection = (section: string) => {
+    if (!editing) return;
+    const hs = editing.hidden_sections || [];
+    setEditing({
+      ...editing,
+      hidden_sections: hs.includes(section) ? hs.filter(s => s !== section) : [...hs, section],
+    });
+  };
+
+  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 size={32} className="animate-spin text-uni-blue" /></div>;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold text-gray-900">Kiosk cihazları</h2>
+        <p className="text-sm text-gray-500">{devices.length} cihaz qeydiyyatda</p>
+      </div>
+
+      {devices.length === 0 ? (
+        <div className="text-center py-16 text-gray-400">
+          <Monitor size={48} className="mx-auto mb-4 opacity-50" />
+          <p className="text-lg font-medium">Hələ heç bir kiosk qoşulmayıb</p>
+          <p className="text-sm mt-1">Electron proqramı işə düşdükdə cihazlar avtomatik qeydiyyatdan keçəcək</p>
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {devices.map(d => (
+            <div key={d.id} className="bg-white rounded-2xl border border-gray-100 p-5">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={"w-3 h-3 rounded-full " + (isOnline(d.last_seen) ? "bg-green-400" : "bg-gray-300")} />
+                  <div>
+                    <h3 className="font-semibold text-gray-900">{d.name || 'Adsız kiosk'}</h3>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {d.floor && `Mərtəbə ${d.floor}`}{d.floor && d.location && ' · '}{d.location}
+                      {!d.floor && !d.location && d.device_id.slice(0, 8) + '...'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={"text-xs px-2 py-1 rounded-full font-medium " + (d.active ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600")}>
+                    {d.active ? 'Aktiv' : 'Dayandırılıb'}
+                  </span>
+                  <button onClick={() => setEditing({ ...d, hidden_sections: d.hidden_sections || [] })}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-500"><Edit3 size={16} /></button>
+                  <button onClick={() => remove(d.id)}
+                    className="p-2 hover:bg-red-50 rounded-lg transition-colors text-red-400"><Trash2 size={16} /></button>
+                </div>
+              </div>
+              {d.hidden_sections && d.hidden_sections.length > 0 && (
+                <div className="mt-3 flex gap-1.5 flex-wrap">
+                  {d.hidden_sections.map(s => (
+                    <span key={s} className="text-xs px-2 py-0.5 bg-orange-50 text-orange-600 rounded-full">
+                      {SECTION_OPTIONS.find(o => o.key === s)?.label || s} gizli
+                    </span>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-gray-300 mt-3">
+                Son görülmə: {d.last_seen ? new Date(d.last_seen).toLocaleString('az-AZ') : 'heç vaxt'}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {editing && (
+        <FormModal title="Kiosku redaktə et" onClose={() => setEditing(null)} onSave={save} saving={saving}>
+          <Input label="Cihaz adı" value={editing.name || ''} onChange={v => setEditing({ ...editing, name: v })} />
+          <Input label="Mərtəbə" value={editing.floor || ''} onChange={v => setEditing({ ...editing, floor: v })} />
+          <Input label="Yer" value={editing.location || ''} onChange={v => setEditing({ ...editing, location: v })} />
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-2 block">Status</label>
+            <label className={"flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition-colors " +
+              (editing.active ? "border-green-400 bg-green-50" : "border-red-300 bg-red-50")}>
+              <input type="checkbox" checked={editing.active} onChange={() => setEditing({ ...editing, active: !editing.active })}
+                className="w-4 h-4 rounded border-gray-300 text-green-600" />
+              <span className="text-sm font-medium text-gray-700">{editing.active ? 'Aktiv' : 'Dayandırılıb'}</span>
+            </label>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-2 block">Gizli bölmələr</label>
+            <p className="text-xs text-gray-400 mb-3">Bu kiosk-da göstərilməyəcək bölmələr</p>
+            <div className="grid grid-cols-2 gap-2">
+              {SECTION_OPTIONS.map(s => (
+                <label key={s.key} className={"flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition-colors " +
+                  (editing.hidden_sections.includes(s.key) ? "border-orange-400 bg-orange-50" : "border-gray-200 hover:bg-gray-50")}>
+                  <input type="checkbox" checked={editing.hidden_sections.includes(s.key)} onChange={() => toggleSection(s.key)}
+                    className="w-4 h-4 rounded border-gray-300 text-orange-500" />
+                  <span className="text-sm font-medium text-gray-700">{s.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
         </FormModal>
       )}
     </div>

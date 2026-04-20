@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Map, CalendarDays, GraduationCap, Info, Clock, ChevronLeft,
-  Home, Search, ArrowRight, Bell, Coffee, Globe
+  Home, Search, ArrowRight, Bell, Coffee, Globe, Delete
 } from 'lucide-react';
 import { useKioskData } from '../shared/useKioskData';
 import { useI18n, type Lang } from '../shared/i18n';
@@ -10,6 +10,40 @@ import type { Announcement, Exam, Event as KioskEvent, CafeteriaCategory, InfoCo
 
 const LOCALE_MAP: Record<Lang, string> = { az: 'az-AZ', en: 'en-GB', ru: 'ru-RU' };
 const LANG_LABELS: Record<Lang, string> = { az: 'AZ', en: 'EN', ru: 'RU' };
+
+// --- Virtual Keyboard ---
+const KB_ROWS = [
+  ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
+  ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
+  ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
+  ['Z', 'X', 'C', 'V', 'B', 'N', 'M', '-'],
+];
+const VirtualKeyboard = ({ value, onChange, onSubmit }: { value: string; onChange: (v: string) => void; onSubmit: () => void }) => (
+  <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className="mt-6 select-none">
+    {KB_ROWS.map((row, ri) => (
+      <div key={ri} className="flex justify-center gap-2 mb-2">
+        {row.map(k => (
+          <button key={k} onPointerDown={e => { e.preventDefault(); onChange(value + k); }}
+            className="w-[72px] h-[64px] bg-gray-100 hover:bg-gray-200 active:bg-uni-blue active:text-white rounded-2xl text-2xl font-bold text-gray-700 transition-colors">{k}</button>
+        ))}
+        {ri === 3 && (
+          <button onPointerDown={e => { e.preventDefault(); onChange(value.slice(0, -1)); }}
+            className="w-[100px] h-[64px] bg-red-50 hover:bg-red-100 active:bg-red-500 active:text-white rounded-2xl flex items-center justify-center transition-colors text-red-400">
+            <Delete size={28} />
+          </button>
+        )}
+      </div>
+    ))}
+    <div className="flex justify-center gap-2 mt-1">
+      <button onPointerDown={e => { e.preventDefault(); onChange(''); }}
+        className="px-8 h-[60px] bg-gray-200 hover:bg-gray-300 rounded-2xl text-xl font-bold text-gray-500 transition-colors">Sil</button>
+      <button onPointerDown={e => { e.preventDefault(); onChange(value + ' '); }}
+        className="w-[320px] h-[60px] bg-gray-100 hover:bg-gray-200 rounded-2xl text-xl font-bold text-gray-500 transition-colors">Boşluq</button>
+      <button onPointerDown={e => { e.preventDefault(); onSubmit(); }}
+        className="px-10 h-[60px] bg-uni-blue hover:bg-blue-900 text-white rounded-2xl text-xl font-bold transition-colors flex items-center gap-2"><Search size={22} /> Axtar</button>
+    </div>
+  </motion.div>
+);
 
 // --- Screensaver ---
 const Screensaver = ({ onWake }: { onWake: () => void }) => {
@@ -248,12 +282,12 @@ const ExamsView = ({ exams }: { exams: Exam[] }) => {
           <div className="w-32 h-32 bg-uni-gold/10 rounded-[2rem] flex items-center justify-center mx-auto mb-10"><Clock size={64} className="text-uni-gold" /></div>
           <h3 className="text-5xl font-bold text-uni-blue mb-6">{t('exams.title') as string}</h3>
           <p className="text-2xl text-gray-500 mb-12 leading-relaxed">{t('exams.enter.group') as string}</p>
-          <div className="glass-panel border-gray-200 border-2 rounded-[2rem] p-4 flex gap-4 mb-6 shadow-sm focus-within:border-uni-blue transition-colors">
+          <div className="glass-panel border-gray-200 border-2 rounded-[2rem] p-4 flex gap-4 mb-6 shadow-sm border-uni-blue transition-colors">
             <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center text-gray-500"><Search size={32} /></div>
-            <input type="text" value={groupNumber} onChange={ev => setGroupNumber(ev.target.value)} onKeyDown={handleKeyDown}
-              placeholder={t('exams.placeholder') as string} className="flex-1 bg-transparent text-4xl text-uni-blue placeholder-gray-400 outline-none px-4 font-bold text-center" />
+            <input type="text" readOnly value={groupNumber}
+              placeholder={t('exams.placeholder') as string} className="flex-1 bg-transparent text-4xl text-uni-blue placeholder-gray-400 outline-none px-4 font-bold text-center caret-transparent" />
           </div>
-          <button onClick={handleSearch} className="w-full py-6 bg-uni-blue text-white rounded-[2rem] text-3xl font-bold shadow-xl hover:bg-blue-900 transition-colors">{t('exams.search') as string}</button>
+          <VirtualKeyboard value={groupNumber} onChange={setGroupNumber} onSubmit={handleSearch} />
         </motion.div>
       </div>
     );
@@ -479,6 +513,7 @@ declare global {
       isKiosk: boolean;
       verifyPin: (pin: string) => Promise<boolean>;
       exitApp: () => Promise<void>;
+      getDeviceId: () => Promise<string>;
     };
   }
 }
@@ -539,6 +574,25 @@ const PinExitOverlay = ({ onClose }: { onClose: () => void }) => {
         </div>
         <button onClick={onClose} className="w-full py-3 text-gray-400 hover:text-gray-600 font-medium text-lg">{t('pin.cancel') as string}</button>
       </motion.div>
+    </motion.div>
+  );
+};
+
+// --- Maintenance Screen ---
+const MaintenanceScreen = () => {
+  const [time, setTime] = useState(new Date());
+  const { t, lang } = useI18n();
+  const locale = LOCALE_MAP[lang];
+  useEffect(() => { const iv = setInterval(() => setTime(new Date()), 1000); return () => clearInterval(iv); }, []);
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 bg-gray-900 flex flex-col items-center justify-center z-[100]">
+      <div className="text-6xl mb-6">🔧</div>
+      <h1 className="text-4xl font-bold text-white mb-3">Texniki Fasilə</h1>
+      <p className="text-xl text-gray-400 mb-8">Sistem müvəqqəti dayandırılıb</p>
+      <div className="text-5xl font-light text-gray-500">
+        {time.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
+      </div>
     </motion.div>
   );
 };
@@ -633,7 +687,8 @@ export default function KioskApp() {
     <div className="w-screen h-screen flex flex-col relative overflow-hidden">
       <div className="ambient-bg"></div>
       <SecretExitZone />
-      <AnimatePresence>{isIdle && <Screensaver onWake={resetIdleTimer} />}</AnimatePresence>
+      {data.settings?.kiosk_paused && <MaintenanceScreen />}
+      <AnimatePresence>{isIdle && !data.settings?.kiosk_paused && <Screensaver onWake={resetIdleTimer} />}</AnimatePresence>
       {!isIdle && (
         <>
           <Header title={getViewTitle()} onHome={() => setCurrentView('home')} onBack={currentView !== 'home' ? () => setCurrentView('home') : undefined} />

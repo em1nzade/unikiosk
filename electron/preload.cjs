@@ -6,4 +6,5 @@ contextBridge.exposeInMainWorld('kioskAPI', {
   platform: process.platform,
   verifyPin: (pin) => ipcRenderer.invoke('verify-pin', pin),
   exitApp: () => ipcRenderer.invoke('exit-app'),
+  getDeviceId: () => ipcRenderer.invoke('get-device-id'),
 });

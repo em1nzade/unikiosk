@@ -14,21 +14,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const sql = neon(process.env.DATABASE_URL!);
+    const deviceId = req.query.device as string | undefined;
 
-    const result = await sql`
-      SELECT 
-        (SELECT MAX(updated_at) FROM announcements) as ann_updated,
-        (SELECT MAX(updated_at) FROM exams) as exam_updated,
-        (SELECT MAX(updated_at) FROM events) as event_updated,
-        (SELECT MAX(updated_at) FROM info_content) as info_updated
-    `;
-
-    const timestamps = result[0];
-    const etag = Buffer.from(JSON.stringify(timestamps)).toString('base64');
-    
-    const clientEtag = req.headers['if-none-match'];
-    if (clientEtag === etag) {
-      return res.status(304).end();
+    // Auto-register / update last_seen for kiosk devices
+    let hiddenSections: string[] = [];
+    if (deviceId) {
+      const devices = await sql`INSERT INTO kiosk_devices (device_id) VALUES (${deviceId})
+        ON CONFLICT (device_id) DO UPDATE SET last_seen = NOW()
+        RETURNING hidden_sections, active`;
+      if (devices[0]) {
+        hiddenSections = devices[0].hidden_sections || [];
+        if (devices[0].active === false) {
+          return res.json({ paused: true, etag: '', announcements: [], exams: [], events: [], cafeteria: [], info: [], settings: { kiosk_paused: true } });
+        }
+      }
     }
 
     const [announcements, exams, events, cafeteria_categories, cafeteria_items, info, settingsRows] = await Promise.all([
@@ -51,9 +50,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       settings[row.key] = row.value;
     }
 
+    // Apply per-device hidden sections
+    const result_data: Record<string, any> = {
+      announcements: hiddenSections.includes('announcements') ? [] : announcements,
+      exams: hiddenSections.includes('exams') ? [] : exams,
+      events: hiddenSections.includes('events') ? [] : events,
+      cafeteria: hiddenSections.includes('cafeteria') ? [] : cafeteria,
+      info: hiddenSections.includes('info') ? [] : info,
+      settings,
+    };
+
+    // Compute ETag from actual data so ANY change is detected
+    const etag = Buffer.from(JSON.stringify(result_data)).toString('base64url').slice(0, 32);
+    result_data.etag = etag;
+
+    const clientEtag = req.headers['if-none-match'];
+    if (clientEtag === etag) {
+      return res.status(304).end();
+    }
+
     res.setHeader('ETag', etag);
     res.setHeader('Cache-Control', 'no-cache');
-    return res.json({ announcements, exams, events, cafeteria, info, settings, etag });
+    return res.json(result_data);
   } catch (err: any) {
     return res.status(500).json({ error: err.message, stack: err.stack });
   }

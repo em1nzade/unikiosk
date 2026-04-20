@@ -1,6 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { KioskData } from './types';
 
+declare global {
+  interface Window {
+    kioskAPI?: {
+      isKiosk: boolean;
+      getDeviceId: () => Promise<string>;
+      [key: string]: any;
+    };
+  }
+}
+
 const BASE_URL = import.meta.env.VITE_API_URL || '';
 const POLL_INTERVAL = 5000;
 
@@ -9,6 +19,14 @@ export function useKioskData() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const etagRef = useRef<string>('');
+  const deviceIdRef = useRef<string | null>(null);
+
+  // Get device ID from Electron on mount
+  useEffect(() => {
+    if (window.kioskAPI?.getDeviceId) {
+      window.kioskAPI.getDeviceId().then(id => { deviceIdRef.current = id; });
+    }
+  }, []);
 
   const fetchData = useCallback(async () => {
     try {
@@ -17,7 +35,8 @@ export function useKioskData() {
         headers['If-None-Match'] = etagRef.current;
       }
 
-      const res = await fetch(`${BASE_URL}/api/sync`, { headers });
+      const params = deviceIdRef.current ? `?device=${deviceIdRef.current}` : '';
+      const res = await fetch(`${BASE_URL}/api/sync${params}`, { headers });
 
       if (res.status === 304) return; // No changes
 

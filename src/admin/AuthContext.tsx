@@ -14,6 +14,7 @@ interface AuthContextType {
   logout: () => void;
   loading: boolean;
   error: string | null;
+  loginTime: number | null;
 }
 
 const AuthContext = createContext<AuthContextType>(null!);
@@ -29,6 +30,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loginTime, setLoginTime] = useState<number | null>(() => {
+    const stored = sessionStorage.getItem('admin_login_time');
+    return stored ? Number(stored) : null;
+  });
 
   useEffect(() => {
     if (token) sessionStorage.setItem('admin_token', token);
@@ -54,8 +59,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(body.error || 'Giriş uğursuz oldu');
       }
       const data = await res.json();
+      const now = Date.now();
       setToken(data.token);
       setUser(data.user);
+      setLoginTime(now);
+      sessionStorage.setItem('admin_login_time', String(now));
     } catch (err: any) {
       setError(err.message);
       throw err;
@@ -69,10 +77,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     sessionStorage.removeItem('admin_token');
     sessionStorage.removeItem('admin_user');
+    sessionStorage.removeItem('admin_login_time');
+    setLoginTime(null);
   };
 
   return (
-    <AuthContext.Provider value={{ token, user, login, logout, loading, error }}>
+    <AuthContext.Provider value={{ token, user, login, logout, loading, error, loginTime }}>
       {children}
     </AuthContext.Provider>
   );
