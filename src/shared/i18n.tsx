@@ -44,6 +44,8 @@ const translations = {
   'dept.empty.desc': { az: 'Bu bölmə üçün hələ məlumat əlavə edilməyib.', en: 'No content has been added for this section yet.', ru: 'Для этого раздела пока нет данных.' },
   'schedule.day': { az: 'Gün', en: 'Day', ru: 'День' },
   'schedule.time': { az: 'Saat', en: 'Time', ru: 'Время' },
+  'schedule.searchGroup': { az: 'Qrup axtar...', en: 'Search group...', ru: 'Поиск группы...' },
+  'schedule.noMatch': { az: 'adlı qrup tapılmadı', en: 'group not found', ru: 'группа не найдена' },
 
   // Events detail
   'events.about': { az: 'Tədbir haqqında', en: 'About the event', ru: 'О мероприятии' },

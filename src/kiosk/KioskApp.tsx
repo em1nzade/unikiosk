@@ -107,6 +107,7 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
   const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null);
   const [contentTab, setContentTab] = useState<'schedule' | 'announcement' | 'exam'>('schedule');
   const [courseYear, setCourseYear] = useState<number>(1);
+  const [groupFilter, setGroupFilter] = useState('');
 
   const faculty = faculties.find(f => f.id === selectedFacultyId);
   const department = faculty?.departments.find(d => d.id === selectedDeptId);
@@ -148,6 +149,7 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
   if (!department && contentTab !== 'schedule') {
     const facultySchedules = schedules.filter(s => s.faculty_id === faculty.id);
     const hasSchedules = facultySchedules.length > 0;
+    const availableYears = [...new Set(facultySchedules.map(s => s.course_year))].sort();
     return (
       <div className="flex-1 pt-40 pb-12 px-12 overflow-y-auto">
         <div className="max-w-6xl mx-auto">
@@ -157,23 +159,53 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
           </button>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-10">
             <h3 className="text-4xl font-bold text-uni-blue mb-2">{faculty.name}</h3>
-            <p className="text-xl text-gray-500">{t('faculty.selectDept') as string}</p>
           </motion.div>
 
-          {/* Schedule card */}
+          {/* Schedule section */}
           {hasSchedules && (
-            <motion.button initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-              whileTap={{ scale: 0.98 }} onClick={() => { setContentTab('schedule'); setCourseYear(1); }}
-              className="w-full bg-gradient-to-r from-uni-blue to-blue-800 rounded-[2rem] p-8 shadow-lg mb-8 text-left flex items-center gap-6 group hover:shadow-xl transition-all">
-              <div className="w-20 h-20 bg-white/20 rounded-2xl flex items-center justify-center shrink-0">
-                <Clock size={40} className="text-white" />
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-10">
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-10 h-10 bg-uni-blue/10 rounded-xl flex items-center justify-center">
+                  <Clock size={22} className="text-uni-blue" />
+                </div>
+                <h4 className="text-2xl font-bold text-uni-blue">{t('dept.schedules') as string}</h4>
               </div>
-              <div className="flex-1">
-                <h4 className="text-3xl font-bold text-white mb-1">{t('dept.schedules') as string}</h4>
-                <p className="text-lg text-blue-200">{facultySchedules.length} {t('dept.courseYear') as string}</p>
+              <div className="grid grid-cols-4 gap-4">
+                {[1, 2, 3, 4].map((y, i) => {
+                  const exists = availableYears.includes(y);
+                  return (
+                    <motion.button key={y} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.06 }}
+                      whileTap={exists ? { scale: 0.95 } : undefined}
+                      onClick={() => { if (exists) { setCourseYear(y); setContentTab('schedule'); } }}
+                      className={`relative rounded-[1.5rem] p-6 text-left transition-all ${exists
+                        ? 'bg-gradient-to-br from-uni-blue to-blue-800 shadow-lg hover:shadow-xl cursor-pointer'
+                        : 'bg-gray-100 border border-gray-200 cursor-default'}`}>
+                      <span className={`text-5xl font-black ${exists ? 'text-white' : 'text-gray-300'}`}>{y}</span>
+                      <p className={`text-lg font-semibold mt-2 ${exists ? 'text-blue-200' : 'text-gray-400'}`}>{t('dept.courseYear') as string}</p>
+                      {exists && (
+                        <div className="absolute top-5 right-5">
+                          <ChevronRight size={24} className="text-white/50" />
+                        </div>
+                      )}
+                    </motion.button>
+                  );
+                })}
               </div>
-              <ChevronRight size={36} className="text-white/50 group-hover:text-white transition-colors shrink-0" />
-            </motion.button>
+            </motion.div>
+          )}
+
+          {/* Divider */}
+          {hasSchedules && faculty.departments.length > 0 && (
+            <div className="flex items-center gap-4 mb-8">
+              <div className="flex-1 h-px bg-gray-200" />
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center">
+                  <BookOpen size={22} className="text-indigo-600" />
+                </div>
+                <span className="text-xl font-bold text-gray-400">{t('faculty.selectDept') as string}</span>
+              </div>
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
           )}
 
           {/* Departments */}
@@ -212,22 +244,44 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
             <h3 className="text-4xl font-bold text-uni-blue mb-2">{t('dept.schedules') as string}</h3>
           </motion.div>
 
-          {/* Course year selector */}
-          <div className="flex gap-3 mb-6">
-            {[1, 2, 3, 4].map(y => {
-              const exists = facultySchedules.some(s => s.course_year === y);
-              return (
-                <button key={y} onClick={() => setCourseYear(y)}
-                  className={`w-16 h-16 rounded-2xl text-2xl font-bold transition-all ${courseYear === y ? 'bg-uni-gold text-white shadow-lg' : exists ? 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50' : 'bg-gray-100 text-gray-300 border border-gray-100 cursor-default'}`}>
-                  {y}
-                </button>
-              );
-            })}
-            <span className="flex items-center text-xl text-gray-400 ml-2">{t('dept.courseYear') as string}</span>
+          {/* Course year selector + group filter */}
+          <div className="flex items-center gap-4 mb-6 flex-wrap">
+            <div className="flex gap-3">
+              {[1, 2, 3, 4].map(y => {
+                const exists = facultySchedules.some(s => s.course_year === y);
+                return (
+                  <button key={y} onClick={() => { if (exists) { setCourseYear(y); setGroupFilter(''); } }}
+                    className={`w-16 h-16 rounded-2xl text-2xl font-bold transition-all ${courseYear === y ? 'bg-uni-gold text-white shadow-lg' : exists ? 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50' : 'bg-gray-100 text-gray-300 border border-gray-100 cursor-default'}`}>
+                    {y}
+                  </button>
+                );
+              })}
+              <span className="flex items-center text-xl text-gray-400 ml-1">{t('dept.courseYear') as string}</span>
+            </div>
+            {schedule && schedule.groups.length > 0 && (
+              <div className="flex items-center gap-2 ml-auto">
+                <div className="relative">
+                  <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input type="text" value={groupFilter} onChange={e => setGroupFilter(e.target.value)}
+                    placeholder={t('schedule.searchGroup') as string || 'Qrup axtar...'}
+                    className="pl-12 pr-4 py-3 w-64 text-lg bg-white border border-gray-200 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-uni-blue/30 focus:border-uni-blue transition-all" />
+                  {groupFilter && (
+                    <button onClick={() => setGroupFilter('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1">
+                      <span className="text-xl leading-none">&times;</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Schedule grid */}
-          {schedule && schedule.groups.length > 0 ? (
+          {schedule && schedule.groups.length > 0 ? (() => {
+            const filteredIndices = groupFilter.trim()
+              ? schedule.groups.map((g, i) => ({ g, i })).filter(({ g }) => g.toLowerCase().includes(groupFilter.trim().toLowerCase())).map(({ i }) => i)
+              : schedule.groups.map((_, i) => i);
+            const filteredGroups = filteredIndices.map(i => schedule.groups[i]);
+            return filteredGroups.length > 0 ? (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
               className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-x-auto">
               <table className="w-full border-collapse">
@@ -235,7 +289,7 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
                   <tr className="bg-uni-blue">
                     <th className="px-4 py-4 text-base font-bold text-white border-r border-blue-700 sticky left-0 bg-uni-blue z-10 w-16">{t('schedule.day') as string || 'Gün'}</th>
                     <th className="px-3 py-4 text-sm font-bold text-white border-r border-blue-700 sticky left-16 bg-uni-blue z-10 w-28">{t('schedule.time') as string || 'Saat'}</th>
-                    {schedule.groups.map((g, i) => (
+                    {filteredGroups.map((g, i) => (
                       <th key={i} className="px-3 py-4 text-sm font-bold text-white border-r border-blue-700 min-w-[160px]">{g}</th>
                     ))}
                   </tr>
@@ -248,7 +302,7 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
                           <td rowSpan={3} className="px-3 py-2 text-center font-black text-2xl text-uni-blue border-r border-gray-200 sticky left-0 bg-white z-10 align-middle">{dayName}</td>
                         )}
                         <td className="px-2 py-3 text-sm font-semibold text-gray-600 border-r border-gray-200 sticky left-16 bg-white z-10 whitespace-nowrap">{slot}</td>
-                        {schedule.groups.map((_, gIdx) => {
+                        {filteredIndices.map((gIdx) => {
                           const key = `${dayIdx + 1}_${slotIdx + 1}_${gIdx}`;
                           const cell = schedule.cells[key];
                           return (
@@ -269,7 +323,13 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
                 </tbody>
               </table>
             </motion.div>
-          ) : (
+            ) : (
+              <div className="bg-white rounded-[2rem] p-12 text-center shadow-sm border border-gray-100 mt-2">
+                <Search size={40} className="text-gray-300 mx-auto mb-4" />
+                <p className="text-xl text-gray-500">"{groupFilter}" {t('schedule.noMatch') as string || 'adlı qrup tapılmadı'}</p>
+              </div>
+            );
+          })() : (
             <div className="bg-white rounded-[3rem] p-16 text-center shadow-sm border border-gray-100 flex flex-col items-center mt-6">
               <div className="w-24 h-24 bg-gray-50 rounded-3xl flex items-center justify-center mb-8">
                 <Search size={48} className="text-gray-300" />
