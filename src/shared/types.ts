@@ -6,6 +6,7 @@ export interface Announcement {
   importance: 'high' | 'medium' | 'low';
   date: string;
   active: boolean;
+  faculty_id?: number | null;
 }
 
 export interface DeptContent {

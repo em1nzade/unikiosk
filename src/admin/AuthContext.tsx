@@ -5,6 +5,7 @@ interface AdminUser {
   name: string;
   role: string;
   permissions: string[];
+  faculty_ids?: number[];
 }
 
 interface AuthContextType {

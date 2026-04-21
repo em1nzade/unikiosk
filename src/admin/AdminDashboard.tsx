@@ -176,6 +176,9 @@ export default function AdminDashboard() {
   const userPerms: string[] = currentUser?.permissions ?? [];
   const isSuperAdmin = currentUser?.role === 'superadmin';
   const hasPermission = (p: string) => isSuperAdmin || userPerms.includes(p);
+  const allowedFacultyIds: number[] = isSuperAdmin ? [] :
+    (currentUser?.faculty_ids?.length ? currentUser.faculty_ids :
+      userPerms.filter(p => /^faculty_\d+$/.test(p)).map(p => parseInt(p.replace('faculty_', ''), 10)));
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -313,14 +316,14 @@ export default function AdminDashboard() {
         ) : (
           <>
             {tab === 'dashboard' && <DashboardView announcements={announcements} faculties={faculties} events={events} onNavigate={setTab} />}
-            {tab === 'announcements' && <AnnouncementsManager items={announcements} token={token!} onRefresh={loadAll} />}
+            {tab === 'announcements' && <AnnouncementsManager items={announcements} token={token!} onRefresh={loadAll} faculties={faculties} allowedFacultyIds={allowedFacultyIds} />}
             {tab === 'faculties' && <FacultyManager faculties={faculties} token={token!} onRefresh={loadAll} />}
             {tab === 'schedules' && <ScheduleEditor faculties={faculties} token={token!} />}
             {tab === 'events' && <EventsManager items={events} token={token!} onRefresh={loadAll} />}
             {tab === 'cafeteria' && <CafeteriaManager items={cafeteria} token={token!} onRefresh={loadAll} />}
             {tab === 'info' && <InfoManager items={info} token={token!} onRefresh={loadAll} />}
             {tab === 'settings' && <SettingsManager settings={settings} announcements={announcements} token={token!} onRefresh={loadAll} />}
-            {tab === 'users' && <UsersManager items={users} token={token!} onRefresh={loadAll} />}
+            {tab === 'users' && <UsersManager items={users} token={token!} onRefresh={loadAll} faculties={faculties} />}
             {tab === 'devices' && <DevicesManager token={token!} />}
           </>
         )}
@@ -459,7 +462,7 @@ function SettingsManager({ settings, announcements, token, onRefresh }: { settin
 }
 
 // ─── Announcements Manager ──────────────────────────────
-function AnnouncementsManager({ items, token, onRefresh }: { items: Announcement[]; token: string; onRefresh: () => void }) {
+function AnnouncementsManager({ items, token, onRefresh, faculties, allowedFacultyIds }: { items: Announcement[]; token: string; onRefresh: () => void; faculties: Faculty[]; allowedFacultyIds: number[] }) {
   const [editing, setEditing] = useState<Partial<Announcement> | null>(null);
   const [saving, setSaving] = useState(false);
   const [types, setTypes] = useState<{ id: number; name: string }[]>([]);
@@ -488,11 +491,19 @@ function AnnouncementsManager({ items, token, onRefresh }: { items: Announcement
     onRefresh();
   };
 
+  // Faculty-scoped filtering
+  const visibleItems = allowedFacultyIds.length > 0
+    ? items.filter(a => !a.faculty_id || allowedFacultyIds.includes(a.faculty_id))
+    : items;
+
+  // Default faculty_id when creating (faculty-scoped admin auto-selects their faculty)
+  const defaultFacultyId = allowedFacultyIds.length === 1 ? allowedFacultyIds[0] : null;
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Elanlar</h2>
-        <button onClick={() => setEditing({ importance: 'low', type: types[0]?.name || '', date: new Date().toISOString().slice(0, 10) })}
+        <button onClick={() => setEditing({ importance: 'low', type: types[0]?.name || '', date: new Date().toISOString().slice(0, 10), faculty_id: defaultFacultyId })}
           className="flex items-center gap-2 px-4 py-2.5 bg-uni-blue text-white rounded-xl font-medium hover:bg-blue-900">
           <Plus size={18} /> Yeni elan
         </button>
@@ -502,6 +513,7 @@ function AnnouncementsManager({ items, token, onRefresh }: { items: Announcement
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
               <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">Başlıq</th>
+              <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">Fakültə</th>
               <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">Tip</th>
               <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">Vaciblik</th>
               <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">Tarix</th>
@@ -509,9 +521,12 @@ function AnnouncementsManager({ items, token, onRefresh }: { items: Announcement
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {items.map(a => (
+            {visibleItems.map(a => {
+              const fac = faculties.find(f => f.id === a.faculty_id);
+              return (
               <tr key={a.id} className="hover:bg-gray-50">
                 <td className="px-6 py-4 font-medium text-gray-900">{a.title}</td>
+                <td className="px-6 py-4 text-gray-500 text-sm">{fac ? <span className="px-2 py-1 bg-blue-50 text-uni-blue rounded-lg text-xs font-medium">{fac.name}</span> : <span className="text-gray-400 text-xs">Ümumi</span>}</td>
                 <td className="px-6 py-4 text-gray-500">{a.type}</td>
                 <td className="px-6 py-4"><span className={"px-3 py-1 rounded-full text-xs font-bold " + (a.importance === 'high' ? 'bg-red-100 text-red-700' : a.importance === 'medium' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600')}>{a.importance === 'high' ? 'Yüksək' : a.importance === 'medium' ? 'Orta' : 'Aşağı'}</span></td>
                 <td className="px-6 py-4 text-gray-500">{a.date}</td>
@@ -520,7 +535,8 @@ function AnnouncementsManager({ items, token, onRefresh }: { items: Announcement
                   <button onClick={() => remove(a.id)} className="p-2 text-gray-400 hover:text-red-600"><Trash2 size={18} /></button>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -533,6 +549,19 @@ function AnnouncementsManager({ items, token, onRefresh }: { items: Announcement
           <Select label="Vaciblik" value={editing.importance || 'low'} onChange={v => setEditing({ ...editing, importance: v as any })}
             options={[{ value: 'high', label: 'Yüksək' }, { value: 'medium', label: 'Orta' }, { value: 'low', label: 'Aşağı' }]} />
           <Input label="Tarix" value={editing.date || ''} onChange={v => setEditing({ ...editing, date: v })} type="date" />
+          {/* Faculty selector: hidden for single-faculty admins, visible for superadmin */}
+          {(allowedFacultyIds.length !== 1) && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Fakültə (boş = ümumi)</label>
+              <select value={editing.faculty_id ?? ''} onChange={e => setEditing({ ...editing, faculty_id: e.target.value ? Number(e.target.value) : null })}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-uni-blue/30">
+                <option value="">— Ümumi (bütün fakültələr) —</option>
+                {(allowedFacultyIds.length > 0 ? faculties.filter(f => allowedFacultyIds.includes(f.id)) : faculties).map(f => (
+                  <option key={f.id} value={f.id}>{f.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </FormModal>
       )}
     </div>
@@ -1290,7 +1319,7 @@ function InfoManager({ items, token, onRefresh }: { items: InfoContent[]; token:
 }
 
 // ─── Users Manager ──────────────────────────────────────
-function UsersManager({ items, token, onRefresh }: { items: AdminUser[]; token: string; onRefresh: () => void }) {
+function UsersManager({ items, token, onRefresh, faculties }: { items: AdminUser[]; token: string; onRefresh: () => void; faculties: Faculty[] }) {
   const [editing, setEditing] = useState<Partial<AdminUser> & { password?: string; permissions?: string[] } | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -1399,20 +1428,41 @@ function UsersManager({ items, token, onRefresh }: { items: AdminUser[]; token: 
           <Select label="Rol" value={editing.role || 'admin'} onChange={v => setEditing({ ...editing, role: v })}
             options={[{ value: 'admin', label: 'Admin' }, { value: 'superadmin', label: 'Super Admin' }]} />
           {editing.role !== 'superadmin' && (
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 block">Sidebar icazələri</label>
-              <p className="text-xs text-gray-400 mb-3">İstifadəçi hansı panelləri görəcək</p>
-              <div className="grid grid-cols-2 gap-2">
-                {ALL_PERMISSIONS.map(p => (
-                  <label key={p.key} className={"flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition-colors " +
-                    ((editing.permissions || []).includes(p.key) ? "border-uni-blue bg-blue-50" : "border-gray-200 hover:bg-gray-50")}>
-                    <input type="checkbox" checked={(editing.permissions || []).includes(p.key)} onChange={() => togglePerm(p.key)}
-                      className="w-4 h-4 rounded border-gray-300 text-uni-blue" />
-                    <span className="text-sm font-medium text-gray-700">{p.label}</span>
-                  </label>
-                ))}
+            <>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Sidebar icazələri</label>
+                <p className="text-xs text-gray-400 mb-3">İstifadəçi hansı panelləri görəcək</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {ALL_PERMISSIONS.map(p => (
+                    <label key={p.key} className={"flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition-colors " +
+                      ((editing.permissions || []).includes(p.key) ? "border-uni-blue bg-blue-50" : "border-gray-200 hover:bg-gray-50")}>
+                      <input type="checkbox" checked={(editing.permissions || []).includes(p.key)} onChange={() => togglePerm(p.key)}
+                        className="w-4 h-4 rounded border-gray-300 text-uni-blue" />
+                      <span className="text-sm font-medium text-gray-700">{p.label}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
-            </div>
+              {faculties.length > 0 && (
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-2 block">Fakültə icazələri</label>
+                  <p className="text-xs text-gray-400 mb-3">Seçilməsə admin bütün fakültələr üçün elan verə bilər. Seçilirsə yalnız seçilli fakültələr üçün elan verə bilər.</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {faculties.map(f => {
+                      const key = `faculty_${f.id}`;
+                      return (
+                        <label key={key} className={"flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition-colors " +
+                          ((editing.permissions || []).includes(key) ? "border-emerald-500 bg-emerald-50" : "border-gray-200 hover:bg-gray-50")}>
+                          <input type="checkbox" checked={(editing.permissions || []).includes(key)} onChange={() => togglePerm(key)}
+                            className="w-4 h-4 rounded border-gray-300 text-emerald-600" />
+                          <span className="text-sm font-medium text-gray-700">{f.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </FormModal>
       )}

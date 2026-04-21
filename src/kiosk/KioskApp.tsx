@@ -109,6 +109,13 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
   const [courseYear, setCourseYear] = useState<number>(1);
   const [groupFilter, setGroupFilter] = useState('');
   const [showKeyboard, setShowKeyboard] = useState(false);
+  const [nowTick, setNowTick] = useState(() => new Date());
+
+  // Tick every 30s so realtime class highlight stays accurate
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(new Date()), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   const faculty = faculties.find(f => f.id === selectedFacultyId);
   const department = faculty?.departments.find(d => d.id === selectedDeptId);
@@ -282,7 +289,7 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
             const filteredGroups = filteredIndices.map(i => schedule.groups[i]);
 
             // Current time detection for "live" highlight
-            const now = new Date();
+            const now = nowTick;
             const nowDay = now.getDay(); // 0=Sun,1=Mon...6=Sat
             const nowMin = now.getHours() * 60 + now.getMinutes();
             const slotRanges = [

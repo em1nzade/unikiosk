@@ -13,14 +13,19 @@ function handleCors(req: VercelRequest, res: VercelResponse): boolean {
   return false;
 }
 
-async function verifyAdmin(req: VercelRequest): Promise<boolean> {
+async function verifyAdmin(req: VercelRequest): Promise<{ ok: false } | { ok: true; role: string; faculty_ids: number[] }> {
   const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ')) return false;
+  if (!authHeader?.startsWith('Bearer ')) return { ok: false };
   try {
     const secret = new TextEncoder().encode(process.env.ADMIN_JWT_SECRET!);
     const { payload } = await jwtVerify(authHeader.slice(7), secret, { algorithms: ['HS256'] });
-    return !!(payload.sub && payload.email);
-  } catch { return false; }
+    if (!payload.sub || !payload.email) return { ok: false };
+    return {
+      ok: true,
+      role: (payload.role as string) || 'admin',
+      faculty_ids: (payload.faculty_ids as number[]) || [],
+    };
+  } catch { return { ok: false }; }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -33,27 +38,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json(rows);
     }
 
-    if (!(await verifyAdmin(req))) return res.status(401).json({ error: 'Unauthorized' });
+    const admin = await verifyAdmin(req);
+    if (!admin.ok) return res.status(401).json({ error: 'Unauthorized' });
+    const isSuperAdmin = admin.role === 'superadmin';
+    const allowedFacultyIds = admin.faculty_ids; // empty = unrestricted for non-super if role is admin
 
     if (req.method === 'POST') {
-      const { title, description, type, importance, date } = req.body;
+      const { title, description, type, importance, date, faculty_id } = req.body;
       if (!title || !description || !type || !importance || !date) {
         return res.status(400).json({ error: 'All fields required' });
       }
-      const rows = await sql`INSERT INTO announcements (title, description, type, importance, date) VALUES (${title}, ${description}, ${type}, ${importance}, ${date}) RETURNING *`;
+      // Faculty-scoped admins can only post for their own faculties
+      const fid = faculty_id ? Number(faculty_id) : null;
+      if (!isSuperAdmin && allowedFacultyIds.length > 0 && fid && !allowedFacultyIds.includes(fid)) {
+        return res.status(403).json({ error: 'Bu fakültə üçün icazəniz yoxdur' });
+      }
+      const rows = await sql`INSERT INTO announcements (title, description, type, importance, date, faculty_id) VALUES (${title}, ${description}, ${type}, ${importance}, ${date}, ${fid}) RETURNING *`;
       return res.status(201).json(rows[0]);
     }
 
     if (req.method === 'PUT') {
-      const { id, title, description, type, importance, date, active } = req.body;
+      const { id, title, description, type, importance, date, active, faculty_id } = req.body;
       if (!id) return res.status(400).json({ error: 'ID required' });
-      const rows = await sql`UPDATE announcements SET title = COALESCE(${title}, title), description = COALESCE(${description}, description), type = COALESCE(${type}, type), importance = COALESCE(${importance}, importance), date = COALESCE(${date}, date), active = COALESCE(${active}, active), updated_at = NOW() WHERE id = ${id} RETURNING *`;
+      // Check ownership for faculty-scoped admins
+      if (!isSuperAdmin && allowedFacultyIds.length > 0) {
+        const existing = await sql`SELECT faculty_id FROM announcements WHERE id = ${id}`;
+        if (existing[0] && existing[0].faculty_id && !allowedFacultyIds.includes(existing[0].faculty_id)) {
+          return res.status(403).json({ error: 'Bu elanı dəyişməyə icazəniz yoxdur' });
+        }
+      }
+      const fid = faculty_id !== undefined ? (faculty_id ? Number(faculty_id) : null) : undefined;
+      const rows = await sql`UPDATE announcements SET title = COALESCE(${title}, title), description = COALESCE(${description}, description), type = COALESCE(${type}, type), importance = COALESCE(${importance}, importance), date = COALESCE(${date}, date), active = COALESCE(${active}, active), faculty_id = COALESCE(${fid !== undefined ? fid : null}, faculty_id), updated_at = NOW() WHERE id = ${id} RETURNING *`;
       return res.json(rows[0]);
     }
 
     if (req.method === 'DELETE') {
       const { id } = req.body;
       if (!id) return res.status(400).json({ error: 'ID required' });
+      if (!isSuperAdmin && allowedFacultyIds.length > 0) {
+        const existing = await sql`SELECT faculty_id FROM announcements WHERE id = ${id}`;
+        if (existing[0] && existing[0].faculty_id && !allowedFacultyIds.includes(existing[0].faculty_id)) {
+          return res.status(403).json({ error: 'Bu elanı silməyə icazəniz yoxdur' });
+        }
+      }
       await sql`DELETE FROM announcements WHERE id = ${id}`;
       return res.json({ success: true });
     }

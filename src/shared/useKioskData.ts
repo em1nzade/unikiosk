@@ -21,27 +21,14 @@ export function useKioskData() {
   const etagRef = useRef<string>('');
   const deviceIdRef = useRef<string | null>(null);
 
-  // Get device ID from Electron on mount
-  useEffect(() => {
-    if (window.kioskAPI?.getDeviceId) {
-      window.kioskAPI.getDeviceId().then(id => { deviceIdRef.current = id; });
-    }
-  }, []);
-
   const fetchData = useCallback(async () => {
     try {
       const headers: Record<string, string> = {};
-      if (etagRef.current) {
-        headers['If-None-Match'] = etagRef.current;
-      }
-
+      if (etagRef.current) headers['If-None-Match'] = etagRef.current;
       const params = deviceIdRef.current ? `?device=${deviceIdRef.current}` : '';
       const res = await fetch(`${BASE_URL}/api/sync${params}`, { headers });
-
-      if (res.status === 304) return; // No changes
-
+      if (res.status === 304) return;
       if (!res.ok) throw new Error(`API error ${res.status}`);
-
       const newData: KioskData = await res.json();
       etagRef.current = newData.etag;
       setData(newData);
@@ -53,10 +40,26 @@ export function useKioskData() {
     }
   }, []);
 
+  // Get device ID from Electron first (await IPC), then start polling
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, POLL_INTERVAL);
-    return () => clearInterval(interval);
+    let cancelled = false;
+    let interval: ReturnType<typeof setInterval>;
+
+    async function init() {
+      if (window.kioskAPI?.getDeviceId) {
+        try {
+          const id = await window.kioskAPI.getDeviceId();
+          if (!cancelled) deviceIdRef.current = id;
+        } catch {}
+      }
+      if (!cancelled) {
+        fetchData();
+        interval = setInterval(fetchData, POLL_INTERVAL);
+      }
+    }
+
+    init();
+    return () => { cancelled = true; clearInterval(interval); };
   }, [fetchData]);
 
   return { data, loading, error, refetch: fetchData };

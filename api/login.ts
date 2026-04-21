@@ -32,13 +32,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!valid) return res.status(401).json({ error: 'Email və ya şifrə yanlışdır' });
 
     const secret = new TextEncoder().encode(process.env.ADMIN_JWT_SECRET!);
-    const jwt = await new SignJWT({ sub: String(user.id), email: user.email, role: user.role })
+    // Extract allowed faculty IDs from permissions (e.g. "faculty_3" → 3)
+    const perms: string[] = user.permissions || [];
+    const facultyIds: number[] = perms
+      .filter((p: string) => /^faculty_\d+$/.test(p))
+      .map((p: string) => parseInt(p.replace('faculty_', ''), 10));
+
+    const jwt = await new SignJWT({
+      sub: String(user.id),
+      email: user.email,
+      role: user.role,
+      ...(facultyIds.length > 0 ? { faculty_ids: facultyIds } : {}),
+    })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
       .setExpirationTime('8h')
       .sign(secret);
 
-    return res.json({ token: jwt, user: { id: user.id, email: user.email, name: user.name, role: user.role, permissions: user.permissions || [] } });
+    return res.json({ token: jwt, user: { id: user.id, email: user.email, name: user.name, role: user.role, permissions: user.permissions || [], faculty_ids: facultyIds } });
   } catch (err: any) {
     console.error('Login error:', err);
     return res.status(500).json({ error: 'Server error' });
