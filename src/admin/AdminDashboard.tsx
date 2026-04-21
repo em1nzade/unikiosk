@@ -491,10 +491,9 @@ function AnnouncementsManager({ items, token, onRefresh, faculties, allowedFacul
     onRefresh();
   };
 
-  // Faculty-scoped filtering
-  const visibleItems = allowedFacultyIds.length > 0
-    ? items.filter(a => !a.faculty_id || allowedFacultyIds.includes(a.faculty_id))
-    : items;
+  // Faculty-scoped: show all items, but only allow editing own faculty's items
+  const canEdit = (a: Announcement) =>
+    allowedFacultyIds.length === 0 || !a.faculty_id || allowedFacultyIds.includes(a.faculty_id);
 
   // Default faculty_id when creating (faculty-scoped admin auto-selects their faculty)
   const defaultFacultyId = allowedFacultyIds.length === 1 ? allowedFacultyIds[0] : null;
@@ -521,18 +520,19 @@ function AnnouncementsManager({ items, token, onRefresh, faculties, allowedFacul
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {visibleItems.map(a => {
+            {items.map(a => {
               const fac = faculties.find(f => f.id === a.faculty_id);
+              const editable = canEdit(a);
               return (
-              <tr key={a.id} className="hover:bg-gray-50">
+              <tr key={a.id} className={"hover:bg-gray-50" + (!editable ? " opacity-60" : "")}>
                 <td className="px-6 py-4 font-medium text-gray-900">{a.title}</td>
                 <td className="px-6 py-4 text-gray-500 text-sm">{fac ? <span className="px-2 py-1 bg-blue-50 text-uni-blue rounded-lg text-xs font-medium">{fac.name}</span> : <span className="text-gray-400 text-xs">Ümumi</span>}</td>
                 <td className="px-6 py-4 text-gray-500">{a.type}</td>
                 <td className="px-6 py-4"><span className={"px-3 py-1 rounded-full text-xs font-bold " + (a.importance === 'high' ? 'bg-red-100 text-red-700' : a.importance === 'medium' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600')}>{a.importance === 'high' ? 'Yüksək' : a.importance === 'medium' ? 'Orta' : 'Aşağı'}</span></td>
                 <td className="px-6 py-4 text-gray-500">{a.date}</td>
                 <td className="px-6 py-4 flex gap-2 justify-end">
-                  <button onClick={() => setEditing(a)} className="p-2 text-gray-400 hover:text-uni-blue"><Edit3 size={18} /></button>
-                  <button onClick={() => remove(a.id)} className="p-2 text-gray-400 hover:text-red-600"><Trash2 size={18} /></button>
+                  <button onClick={() => editable && setEditing(a)} disabled={!editable} className={"p-2 " + (editable ? "text-gray-400 hover:text-uni-blue" : "text-gray-200 cursor-not-allowed")}><Edit3 size={18} /></button>
+                  <button onClick={() => editable && remove(a.id)} disabled={!editable} className={"p-2 " + (editable ? "text-gray-400 hover:text-red-600" : "text-gray-200 cursor-not-allowed")}><Trash2 size={18} /></button>
                 </td>
               </tr>
               );
