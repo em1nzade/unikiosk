@@ -5,6 +5,9 @@ declare global {
   interface Window {
     kioskAPI?: {
       isKiosk: boolean;
+      platform?: string;
+      verifyPin: (pin: string) => Promise<boolean>;
+      exitApp: () => Promise<void>;
       getDeviceId: () => Promise<string>;
       [key: string]: any;
     };

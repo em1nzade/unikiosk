@@ -16,7 +16,8 @@ await sql`INSERT INTO kiosk_settings (key, value) VALUES
   ('ticker_enabled', 'true'),
   ('ticker_mode', '"scroll"'),
   ('ticker_pinned_id', 'null'),
-  ('default_language', '"az"')
+  ('default_language', '"az"'),
+  ('sleep_screen_enabled', 'false')
 ON CONFLICT (key) DO NOTHING`;
 console.log('✓ default settings seeded');
 

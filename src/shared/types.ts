@@ -108,4 +108,5 @@ export interface KioskSettings {
   ticker_pinned_id: number | null;
   default_language: string;
   kiosk_paused?: boolean;
+  sleep_screen_enabled?: boolean;
 }

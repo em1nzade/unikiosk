@@ -167,7 +167,7 @@ export default function AdminDashboard() {
   const [cafeteria, setCafeteria] = useState<CafeteriaCategory[]>([]);
   const [info, setInfo] = useState<InfoContent[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
-  const [settings, setSettings] = useState<KioskSettings>({ ticker_enabled: true, ticker_mode: 'scroll', ticker_pinned_id: null, default_language: 'az' });
+  const [settings, setSettings] = useState<KioskSettings>({ ticker_enabled: true, ticker_mode: 'scroll', ticker_pinned_id: null, default_language: 'az', sleep_screen_enabled: false });
   const [loading, setLoading] = useState(true);
   const [killClicks, setKillClicks] = useState(0);
   const [showKillSwitch, setShowKillSwitch] = useState(false);
@@ -197,6 +197,7 @@ export default function AdminDashboard() {
       ticker_pinned_id: s.ticker_pinned_id ?? null,
       default_language: s.default_language ?? 'az',
       kiosk_paused: s.kiosk_paused ?? false,
+      sleep_screen_enabled: s.sleep_screen_enabled ?? false,
     });
     // Force-logout check: if force_logout_at is newer than login time, kick out
     if (s.force_logout_at && loginTime && new Date(s.force_logout_at).getTime() > loginTime && !isSuperAdmin) {
@@ -440,6 +441,21 @@ function SettingsManager({ settings, announcements, token, onRefresh }: { settin
           </div>
         </div>
 
+        {/* Sleep Screen */}
+        <div className="bg-white rounded-2xl border border-gray-100 p-6">
+          <h3 className="text-lg font-bold text-gray-900 mb-4">Sleep ekranı</h3>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-gray-800">Sleep ekranını aktiv et</p>
+              <p className="text-sm text-gray-500">Kiosk istifadə olunmayanda qoruyucu ekran göstərilsin</p>
+            </div>
+            <button onClick={() => setLocal({ ...local, sleep_screen_enabled: !local.sleep_screen_enabled })}
+              className={"relative w-14 h-7 rounded-full transition-colors " + (local.sleep_screen_enabled ? "bg-uni-blue" : "bg-gray-300")}>
+              <span className={"absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform " + (local.sleep_screen_enabled ? "translate-x-7" : "translate-x-0.5")} />
+            </button>
+          </div>
+        </div>
+
         {/* Language */}
         <div className="bg-white rounded-2xl border border-gray-100 p-6">
           <h3 className="text-lg font-bold text-gray-900 mb-4">Dil tənzimləmələri</h3>
@@ -570,7 +586,7 @@ function AnnouncementsManager({ items, token, onRefresh, faculties, allowedFacul
 
 // ─── Schedule Editor (Excel-like) ─────────────────────────
 const DAY_NAMES = ['I', 'II', 'III', 'IV', 'V'];
-const TIME_SLOTS = ['08:00-09:20', '09:35-10:55', '11:10-12:30'];
+const TIME_SLOTS = ['08:00-09:20', '09:35-10:55', '11:10-12:30', '12:45-14:05', '14:20-15:40', '15:55-17:15'];
 const SECTOR_OPTIONS = [{ value: 'az', label: 'AZ' }, { value: 'ru', label: 'RU' }, { value: 'en', label: 'EN' }];
 
 function ScheduleEditor({ faculties, token }: { faculties: Faculty[]; token: string }) {
@@ -782,7 +798,7 @@ function ScheduleEditor({ faculties, token }: { faculties: Faculty[]; token: str
                     TIME_SLOTS.map((slot, slotIdx) => (
                       <tr key={`${dayIdx}_${slotIdx}`} className={`${slotIdx === 0 ? 'border-t-2 border-gray-300' : 'border-t border-gray-100'} hover:bg-blue-50/30`}>
                         {slotIdx === 0 && (
-                          <td rowSpan={3} className="px-3 py-2 text-center font-black text-lg text-uni-blue border-r border-gray-200 sticky left-0 bg-white z-10 align-middle">{dayName}</td>
+                          <td rowSpan={TIME_SLOTS.length} className="px-3 py-2 text-center font-black text-lg text-uni-blue border-r border-gray-200 sticky left-0 bg-white z-10 align-middle">{dayName}</td>
                         )}
                         <td className="px-2 py-2 text-xs font-medium text-gray-500 border-r border-gray-200 sticky left-20 bg-white z-10 whitespace-nowrap">{slot}</td>
                         {groups.map((_, gIdx) => {
@@ -1500,8 +1516,7 @@ function DevicesManager({ token }: { token: string }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await adminFetch('/settings?action=devices', token);
-      const data = await res.json();
+      const data = await adminFetch<KioskDevice[]>('/settings?action=devices', token);
       setDevices(data);
     } catch { /* ignore */ }
     setLoading(false);

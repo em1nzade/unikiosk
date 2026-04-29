@@ -99,7 +99,7 @@ const WeatherIcon = ({ code, size = 24, className = '' }: { code: number; size?:
 
 // --- Faculty Browser View ---
 const KIOSK_DAY_NAMES = ['I', 'II', 'III', 'IV', 'V'];
-const KIOSK_TIME_SLOTS = ['08⁰⁰-09²⁰', '09³⁵-10⁵⁵', '11¹⁰-12³⁰'];
+const KIOSK_TIME_SLOTS = ['08⁰⁰-09²⁰', '09³⁵-10⁵⁵', '11¹⁰-12³⁰', '12⁴⁵-14⁰⁵', '14²⁰-15⁴⁰', '15⁵⁵-17¹⁵'];
 
 const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; schedules: Schedule[] }) => {
   const { t } = useI18n();
@@ -133,20 +133,30 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
             <p className="text-2xl text-gray-500">{t('faculty.select') as string}</p>
           </motion.div>
           <div className="grid grid-cols-2 gap-6">
-            {faculties.map((f, i) => (
-              <motion.button key={f.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}
-                whileTap={{ scale: 0.98 }} onClick={() => setSelectedFacultyId(f.id)}
-                className="bg-white rounded-[2rem] p-8 shadow-sm border border-gray-100 hover:shadow-lg transition-all text-left flex items-center gap-6 group">
-                <div className="w-20 h-20 bg-blue-50 rounded-2xl flex items-center justify-center text-uni-blue shrink-0 group-hover:bg-uni-blue group-hover:text-white transition-colors">
-                  <GraduationCap size={40} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-2xl font-bold text-gray-900 mb-1 leading-tight">{f.name}</h4>
-                  <p className="text-lg text-gray-500">{f.departments.length} {t('faculty.deptCount') as string}</p>
-                </div>
-                <ChevronRight size={32} className="text-gray-300 group-hover:text-uni-blue transition-colors shrink-0" />
-              </motion.button>
-            ))}
+            {faculties.map((f, i) => {
+              const hasSchedules = schedules.some(s => s.faculty_id === f.id);
+              const disabled = !hasSchedules && f.departments.length === 0;
+              return (
+                <motion.button key={f.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}
+                  whileTap={disabled ? undefined : { scale: 0.98 }}
+                  onClick={() => { if (!disabled) setSelectedFacultyId(f.id); }}
+                  disabled={disabled}
+                  className={`bg-white rounded-[2rem] p-8 shadow-sm border text-left flex items-center gap-6 group transition-all ${disabled
+                    ? 'border-gray-100 opacity-55 cursor-not-allowed'
+                    : 'border-gray-100 hover:shadow-lg'}`}>
+                  <div className={`w-20 h-20 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${disabled
+                    ? 'bg-gray-100 text-gray-400'
+                    : 'bg-blue-50 text-uni-blue group-hover:bg-uni-blue group-hover:text-white'}`}>
+                    <GraduationCap size={40} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className={`text-2xl font-bold mb-1 leading-tight ${disabled ? 'text-gray-500' : 'text-gray-900'}`}>{f.name}</h4>
+                    <p className="text-lg text-gray-500">{disabled ? 'Cədvəl hazırlanır' : `${f.departments.length} ${t('faculty.deptCount') as string}`}</p>
+                  </div>
+                  <ChevronRight size={32} className={`transition-colors shrink-0 ${disabled ? 'text-gray-200' : 'text-gray-300 group-hover:text-uni-blue'}`} />
+                </motion.button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -240,7 +250,8 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
   // Level 3a: Faculty schedule grid view
   if (contentTab === 'schedule' && !selectedDeptId) {
     const facultySchedules = schedules.filter(s => s.faculty_id === faculty.id);
-    const schedule = facultySchedules.find(s => s.course_year === courseYear && s.sector === 'az');
+    const yearSchedules = facultySchedules.filter(s => s.course_year === courseYear);
+    const schedule = yearSchedules.find(s => s.sector === 'az') || yearSchedules[0];
     return (
       <div className="flex-1 pt-40 pb-12 px-8 overflow-y-auto">
         <div className="max-w-[95vw] mx-auto">
@@ -296,6 +307,9 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
               { start: 8 * 60, end: 9 * 60 + 20 },       // 08:00-09:20
               { start: 9 * 60 + 35, end: 10 * 60 + 55 },  // 09:35-10:55
               { start: 11 * 60 + 10, end: 12 * 60 + 30 },  // 11:10-12:30
+              { start: 12 * 60 + 45, end: 14 * 60 + 5 },   // 12:45-14:05
+              { start: 14 * 60 + 20, end: 15 * 60 + 40 },  // 14:20-15:40
+              { start: 15 * 60 + 55, end: 17 * 60 + 15 },  // 15:55-17:15
             ];
             const currentDayIdx = nowDay >= 1 && nowDay <= 5 ? nowDay - 1 : -1; // 0-4 Mon-Fri
             const currentSlotIdx = slotRanges.findIndex(r => nowMin >= r.start && nowMin <= r.end);
@@ -320,7 +334,7 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
                       return (
                       <tr key={`${dayIdx}_${slotIdx}`} className={`${slotIdx === 0 ? 'border-t-2 border-uni-blue/30' : 'border-t border-gray-100'}`}>
                         {slotIdx === 0 && (
-                          <td rowSpan={3} className={`px-3 py-2 text-center font-black text-2xl border-r border-gray-200 sticky left-0 z-10 align-middle ${dayIdx === currentDayIdx ? 'bg-emerald-50 text-emerald-700' : 'bg-white text-uni-blue'}`}>{dayName}</td>
+                          <td rowSpan={KIOSK_TIME_SLOTS.length} className={`px-3 py-2 text-center font-black text-2xl border-r border-gray-200 sticky left-0 z-10 align-middle ${dayIdx === currentDayIdx ? 'bg-emerald-50 text-emerald-700' : 'bg-white text-uni-blue'}`}>{dayName}</td>
                         )}
                         <td className={`px-2 py-3 text-sm font-semibold border-r border-gray-200 sticky left-16 z-10 whitespace-nowrap ${isLiveRow ? 'bg-emerald-50 text-emerald-700' : 'bg-white text-gray-600'}`}>{slot}</td>
                         {filteredIndices.map((gIdx) => {
@@ -893,17 +907,6 @@ const InfoView = ({ info }: { info: InfoContent[] }) => {
 };
 
 // --- PIN Exit Overlay ---
-declare global {
-  interface Window {
-    kioskAPI?: {
-      isKiosk: boolean;
-      verifyPin: (pin: string) => Promise<boolean>;
-      exitApp: () => Promise<void>;
-      getDeviceId: () => Promise<string>;
-    };
-  }
-}
-
 const PinExitOverlay = ({ onClose }: { onClose: () => void }) => {
   const { t } = useI18n();
   const [pin, setPin] = useState('');
@@ -1075,7 +1078,7 @@ export default function KioskApp() {
       <div className="ambient-bg"></div>
       <SecretExitZone />
       {data.settings?.kiosk_paused && <MaintenanceScreen />}
-      <AnimatePresence>{isIdle && !data.settings?.kiosk_paused && <Screensaver onWake={resetIdleTimer} weather={weather} />}</AnimatePresence>
+      <AnimatePresence>{isIdle && !data.settings?.kiosk_paused && data.settings?.sleep_screen_enabled === true && <Screensaver onWake={resetIdleTimer} weather={weather} />}</AnimatePresence>
       {!isIdle && (
         <>
           <Header title={getViewTitle()} onHome={() => setCurrentView('home')} onBack={currentView !== 'home' ? () => setCurrentView('home') : undefined} weather={weather} />
