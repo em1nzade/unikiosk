@@ -8,6 +8,7 @@ import {
 import { useKioskData } from '../shared/useKioskData';
 import { useI18n, type Lang } from '../shared/i18n';
 import type { Announcement, Faculty, Schedule, ScheduleCell, Event as KioskEvent, CafeteriaCategory, InfoContent, KioskSettings } from '../shared/types';
+import campusMapImage from '../../ChatGPT Image Apr 29, 2026, 10_29_39 PM.png';
 
 const LOCALE_MAP: Record<Lang, string> = { az: 'az-AZ', en: 'en-GB', ru: 'ru-RU' };
 const LANG_LABELS: Record<Lang, string> = { az: 'AZ', en: 'EN', ru: 'RU' };
@@ -708,7 +709,10 @@ const HomeMenu = ({ onNavigate, announcements, settings }: { onNavigate: (v: str
 
         <motion.button variants={itemVariants} whileTap={{ scale: 0.98 }} onClick={() => onNavigate('map')}
           className="col-span-1 row-span-1 rounded-[2.5rem] relative overflow-hidden group shadow-xl text-left flex flex-col justify-end p-8">
-          <div className="absolute inset-0 bg-[url('https://picsum.photos/seed/campus3d/800/800')] bg-cover bg-center transition-transform duration-700 group-hover:scale-105"></div>
+          <div
+            className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105"
+            style={{ backgroundImage: `url(${campusMapImage})` }}
+          ></div>
           <div className="absolute inset-0 bg-gradient-to-t from-gray-900/90 via-gray-900/40 to-transparent"></div>
           <div className="relative z-10">
             <div className="glass-panel-dark w-14 h-14 rounded-2xl flex items-center justify-center mb-4 text-white"><Map size={28} /></div>
@@ -724,9 +728,7 @@ const HomeMenu = ({ onNavigate, announcements, settings }: { onNavigate: (v: str
         </motion.button>
 
         <motion.button variants={itemVariants} whileTap={{ scale: 0.98 }} onClick={() => onNavigate('events')}
-          className="col-span-2 row-span-1 rounded-[2.5rem] relative overflow-hidden group shadow-xl text-left flex items-center p-8 gap-6">
-          <div className="absolute inset-0 bg-[url('https://picsum.photos/seed/unievents/800/400')] bg-cover bg-center transition-transform duration-700 group-hover:scale-105"></div>
-          <div className="absolute inset-0 bg-gradient-to-r from-emerald-900/95 via-emerald-900/70 to-emerald-900/30"></div>
+          className="col-span-2 row-span-1 rounded-[2.5rem] bg-emerald-700 relative overflow-hidden group shadow-xl text-left flex items-center p-8 gap-6">
           <div className="glass-panel-dark w-16 h-16 rounded-2xl flex items-center justify-center text-emerald-400 shrink-0 z-10 transition-transform group-hover:scale-110"><CalendarDays size={32} /></div>
           <div className="relative z-10">
             <h3 className="text-4xl font-bold text-white mb-2 text-shadow-md">{t('nav.events') as string}</h3>
@@ -735,8 +737,7 @@ const HomeMenu = ({ onNavigate, announcements, settings }: { onNavigate: (v: str
         </motion.button>
 
         <motion.button variants={itemVariants} whileTap={{ scale: 0.98 }} onClick={() => onNavigate('cafeteria')}
-          className="col-span-1 row-span-1 rounded-[2.5rem] bg-gradient-to-br from-orange-400 to-red-500 p-8 relative overflow-hidden group shadow-xl text-left flex flex-col justify-end">
-          <div className="absolute right-0 top-0 bottom-0 w-full bg-[url('https://picsum.photos/seed/cafeteria/400/400')] bg-cover bg-center opacity-30 mix-blend-overlay transition-transform duration-700 group-hover:scale-105"></div>
+          className="col-span-1 row-span-1 rounded-[2.5rem] bg-orange-500 p-8 relative overflow-hidden group shadow-xl text-left flex flex-col justify-end">
           <div className="relative z-10">
             <div className="bg-white/20 w-14 h-14 rounded-2xl flex items-center justify-center text-white backdrop-blur-md mb-4 transition-colors group-hover:bg-white group-hover:text-amber-600"><Coffee size={28} /></div>
             <h3 className="text-3xl font-bold text-white mb-1 text-shadow-md">{t('nav.cafeteria') as string}</h3>
@@ -754,7 +755,10 @@ const MapView = () => {
   const places = t('map.places') as string[];
   return (
     <div className="absolute inset-0 bg-gray-100">
-      <div className="absolute inset-0 bg-[url('https://picsum.photos/seed/campusmapbig/1920/1080')] bg-cover bg-center"></div>
+      <div
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: `url(${campusMapImage})` }}
+      ></div>
       <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-6 w-full max-w-4xl px-8">
         <div className="glass-panel w-full rounded-full p-4 flex items-center gap-4 shadow-2xl">
           <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center text-uni-blue shadow-sm"><Search size={28} /></div>

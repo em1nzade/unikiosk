@@ -16,6 +16,22 @@ declare global {
 
 const BASE_URL = import.meta.env.VITE_API_URL || '';
 const POLL_INTERVAL = 5000;
+const OFFLINE_DATA: KioskData = {
+  announcements: [],
+  faculties: [],
+  schedules: [],
+  events: [],
+  cafeteria: [],
+  info: [],
+  settings: {
+    ticker_enabled: true,
+    ticker_mode: 'scroll',
+    ticker_pinned_id: null,
+    default_language: 'az',
+    sleep_screen_enabled: false,
+  },
+  etag: 'offline',
+};
 
 export function useKioskData() {
   const [data, setData] = useState<KioskData | null>(null);
@@ -38,6 +54,7 @@ export function useKioskData() {
       setError(null);
     } catch (err: any) {
       setError(err.message);
+      setData(current => current ?? OFFLINE_DATA);
     } finally {
       setLoading(false);
     }
