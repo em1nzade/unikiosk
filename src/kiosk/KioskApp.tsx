@@ -134,12 +134,21 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
           </motion.div>
           <div className="grid grid-cols-2 gap-6">
             {faculties.map((f, i) => {
-              const hasSchedules = schedules.some(s => s.faculty_id === f.id);
-              const disabled = !hasSchedules && f.departments.length === 0;
+              const facultySchedules = schedules.filter(s => s.faculty_id === f.id);
+              const availableYears = [...new Set(facultySchedules.map(s => s.course_year))].sort();
+              const disabled = availableYears.length === 0;
               return (
                 <motion.button key={f.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}
                   whileTap={disabled ? undefined : { scale: 0.98 }}
-                  onClick={() => { if (!disabled) setSelectedFacultyId(f.id); }}
+                  onClick={() => {
+                    if (disabled) return;
+                    setSelectedFacultyId(f.id);
+                    setSelectedDeptId(null);
+                    setCourseYear(availableYears[0]);
+                    setContentTab('schedule');
+                    setGroupFilter('');
+                    setShowKeyboard(false);
+                  }}
                   disabled={disabled}
                   className={`bg-white rounded-[2rem] p-8 shadow-sm border text-left flex items-center gap-6 group transition-all ${disabled
                     ? 'border-gray-100 opacity-55 cursor-not-allowed'
@@ -151,7 +160,7 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
                   </div>
                   <div className="flex-1 min-w-0">
                     <h4 className={`text-2xl font-bold mb-1 leading-tight ${disabled ? 'text-gray-500' : 'text-gray-900'}`}>{f.name}</h4>
-                    <p className="text-lg text-gray-500">{disabled ? 'Cədvəl hazırlanır' : `${f.departments.length} ${t('faculty.deptCount') as string}`}</p>
+                    <p className="text-lg text-gray-500">{disabled ? 'Cədvəl hazırlanır' : `${availableYears.join(', ')} kurs cədvəli`}</p>
                   </div>
                   <ChevronRight size={32} className={`transition-colors shrink-0 ${disabled ? 'text-gray-200' : 'text-gray-300 group-hover:text-uni-blue'}`} />
                 </motion.button>
@@ -255,7 +264,7 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
     return (
       <div className="flex-1 pt-40 pb-12 px-8 overflow-y-auto">
         <div className="max-w-[95vw] mx-auto">
-          <button onClick={() => { setContentTab('announcement'); setSelectedDeptId(null); }}
+          <button onClick={() => { setSelectedFacultyId(null); setSelectedDeptId(null); setContentTab('announcement'); setGroupFilter(''); setShowKeyboard(false); }}
             className="flex items-center gap-3 text-xl font-bold text-uni-blue bg-white px-6 py-3 rounded-full shadow-sm mb-6 hover:bg-gray-50 transition-colors w-fit border border-gray-100">
             <ChevronLeft size={24} /> {faculty.name}
           </button>
@@ -1022,6 +1031,7 @@ export default function KioskApp() {
   const { t, setLang } = useI18n();
   const weather = useBakuWeather();
   const IDLE_TIMEOUT = 30000;
+  const sleepScreenEnabled = data?.settings?.sleep_screen_enabled === true;
 
   useEffect(() => {
     if (data?.settings?.default_language) {
@@ -1036,13 +1046,16 @@ export default function KioskApp() {
     const handleActivity = () => {
       resetIdleTimer();
       clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => { setIsIdle(true); setCurrentView('home'); }, IDLE_TIMEOUT);
+      timeoutId = setTimeout(() => {
+        if (sleepScreenEnabled) setIsIdle(true);
+        setCurrentView('home');
+      }, IDLE_TIMEOUT);
     };
     const evts = ['mousemove', 'mousedown', 'touchstart', 'keydown', 'click'] as const;
     evts.forEach(ev => window.addEventListener(ev, handleActivity));
     handleActivity();
     return () => { evts.forEach(ev => window.removeEventListener(ev, handleActivity)); clearTimeout(timeoutId); };
-  }, [resetIdleTimer]);
+  }, [resetIdleTimer, sleepScreenEnabled]);
 
   if (loading || !data) {
     return (
@@ -1078,8 +1091,8 @@ export default function KioskApp() {
       <div className="ambient-bg"></div>
       <SecretExitZone />
       {data.settings?.kiosk_paused && <MaintenanceScreen />}
-      <AnimatePresence>{isIdle && !data.settings?.kiosk_paused && data.settings?.sleep_screen_enabled === true && <Screensaver onWake={resetIdleTimer} weather={weather} />}</AnimatePresence>
-      {!isIdle && (
+      <AnimatePresence>{isIdle && !data.settings?.kiosk_paused && sleepScreenEnabled && <Screensaver onWake={resetIdleTimer} weather={weather} />}</AnimatePresence>
+      {(!isIdle || !sleepScreenEnabled) && (
         <>
           <Header title={getViewTitle()} onHome={() => setCurrentView('home')} onBack={currentView !== 'home' ? () => setCurrentView('home') : undefined} weather={weather} />
           <main className="flex-1 flex flex-col relative">
