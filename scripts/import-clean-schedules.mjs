@@ -7,6 +7,7 @@ import XLSX from 'xlsx';
 const ROOT = process.cwd();
 const FALLBACK_JSON = '/Users/barbie/Documents/New project 4/sorgular/outputs/kiosk-schedule-all-times.json';
 const EXCEL_DIR = path.join(ROOT, 'exceller');
+const PDF_ROWS_JSON = path.join(ROOT, 'scripts', 'pdf-schedule-rows.json');
 
 const FACULTIES = [
   { key: 'humanitar', name: 'Humanitar, təhsil və dillər fakültəsi', aliases: ['Humanitar, təhsil və dillər'] },
@@ -63,7 +64,7 @@ function normalizeDay(value) {
 }
 
 function normalizeTime(value) {
-  const match = oneLine(value).replace(/[–—]/g, '-').match(/(?:0?8(?:00)?-0?9(?:20)?|0935-1055|09:35-10:55|1110-1230|11:10-12:30|1245-1405|12:45-14:05|1420-1540|14:20-15:40|1555-1715|15:55-17:15)/);
+  const match = oneLine(value).replace(/[–—]/g, '-').match(/(?:0?8(?:00)?-0?9(?:20)?|08:00-09:20|0935-1055|09:35-10:55|1110-1230|11:10-12:30|1245-1405|12:45-14:05|1420-1540|14:20-15:40|1555-1715|15:55-17:15)/);
   if (!match) return '';
   const compact = match[0].replace(/\s+/g, '').replace(/^8/, '800').replace(/^8000/, '0800');
   return TIME_NORMALIZE.get(compact) || TIME_NORMALIZE.get(match[0]) || '';
@@ -84,7 +85,7 @@ function normalizeRoom(value) {
 }
 
 function normalizeGroup(value) {
-  return oneLine(value).replace(/\s+/g, '').replace(/İTS/gi, 'ITS').replace(/İİTS/gi, 'İİTS');
+  return oneLine(value).replace(/\s+/g, '');
 }
 
 function courseYearFromRoman(value) {
@@ -157,6 +158,14 @@ function readEconomicsSeedRows() {
       Auditoriya: cell.r,
     });
   }
+  return rows;
+}
+
+function readPdfRows() {
+  if (!fs.existsSync(PDF_ROWS_JSON)) return [];
+  const source = JSON.parse(fs.readFileSync(PDF_ROWS_JSON, 'utf8'));
+  const rows = [];
+  for (const row of source) addRow(rows, row);
   return rows;
 }
 
@@ -355,6 +364,7 @@ const rows = [
   ...readFallbackRows(),
   ...readEconomicsSeedRows(),
   ...readNatureRows(),
+  ...readPdfRows(),
 ];
 const { schedules, duplicateRows, duplicateCellEntries } = buildSchedules(rows);
 
