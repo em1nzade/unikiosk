@@ -100,6 +100,8 @@ const WeatherIcon = ({ code, size = 24, className = '' }: { code: number; size?:
 // --- Faculty Browser View ---
 const KIOSK_DAY_NAMES = ['I', 'II', 'III', 'IV', 'V'];
 const KIOSK_TIME_SLOTS = ['08⁰⁰-09²⁰', '09³⁵-10⁵⁵', '11¹⁰-12³⁰', '12⁴⁵-14⁰⁵', '14²⁰-15⁴⁰', '15⁵⁵-17¹⁵'];
+const SECTOR_LABELS: Record<string, string> = { az: 'AZ', en: 'EN', ru: 'RU' };
+const SECTOR_ORDER: Record<string, number> = { az: 0, en: 1, ru: 2 };
 
 const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; schedules: Schedule[] }) => {
   const { t } = useI18n();
@@ -107,6 +109,7 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
   const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null);
   const [contentTab, setContentTab] = useState<'schedule' | 'announcement' | 'exam'>('announcement');
   const [courseYear, setCourseYear] = useState<number>(1);
+  const [selectedSector, setSelectedSector] = useState('az');
   const [groupFilter, setGroupFilter] = useState('');
   const [showKeyboard, setShowKeyboard] = useState(false);
   const [nowTick, setNowTick] = useState(() => new Date());
@@ -119,6 +122,14 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
 
   const faculty = faculties.find(f => f.id === selectedFacultyId);
   const department = faculty?.departments.find(d => d.id === selectedDeptId);
+  const getAvailableSectors = (facultyId: number, year: number) => [...new Set(schedules
+    .filter(s => s.faculty_id === facultyId && s.course_year === year)
+    .map(s => s.sector || 'az'))]
+    .sort((a, b) => (SECTOR_ORDER[a] ?? 99) - (SECTOR_ORDER[b] ?? 99) || a.localeCompare(b));
+  const getPreferredSector = (facultyId: number, year: number) => {
+    const sectors = getAvailableSectors(facultyId, year);
+    return sectors.includes('az') ? 'az' : sectors[0] || 'az';
+  };
 
   // Level 1: Faculty list
   if (!faculty) {
@@ -145,6 +156,7 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
                     setSelectedFacultyId(f.id);
                     setSelectedDeptId(null);
                     setCourseYear(availableYears[0]);
+                    setSelectedSector(getPreferredSector(f.id, availableYears[0]));
                     setContentTab('schedule');
                     setGroupFilter('');
                     setShowKeyboard(false);
@@ -203,7 +215,7 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
                   return (
                     <motion.button key={y} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.06 }}
                       whileTap={exists ? { scale: 0.95 } : undefined}
-                      onClick={() => { if (exists) { setCourseYear(y); setContentTab('schedule'); } }}
+                      onClick={() => { if (exists) { setCourseYear(y); setSelectedSector(getPreferredSector(faculty.id, y)); setContentTab('schedule'); } }}
                       className={`relative rounded-[1.5rem] p-6 text-left transition-all ${exists
                         ? 'bg-gradient-to-br from-uni-blue to-blue-800 shadow-lg hover:shadow-xl cursor-pointer'
                         : 'bg-gray-100 border border-gray-200 cursor-default'}`}>
@@ -260,7 +272,9 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
   if (contentTab === 'schedule' && !selectedDeptId) {
     const facultySchedules = schedules.filter(s => s.faculty_id === faculty.id);
     const yearSchedules = facultySchedules.filter(s => s.course_year === courseYear);
-    const schedule = yearSchedules.find(s => s.sector === 'az') || yearSchedules[0];
+    const availableSectors = getAvailableSectors(faculty.id, courseYear);
+    const activeSector = availableSectors.includes(selectedSector) ? selectedSector : getPreferredSector(faculty.id, courseYear);
+    const schedule = yearSchedules.find(s => s.sector === activeSector) || yearSchedules[0];
     return (
       <div className="flex-1 pt-40 pb-12 px-8 overflow-y-auto">
         <div className="max-w-[95vw] mx-auto">
@@ -278,7 +292,7 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
               {[1, 2, 3, 4].map(y => {
                 const exists = facultySchedules.some(s => s.course_year === y);
                 return (
-                  <button key={y} onClick={() => { if (exists) { setCourseYear(y); setGroupFilter(''); } }}
+                  <button key={y} onClick={() => { if (exists) { setCourseYear(y); setSelectedSector(getPreferredSector(faculty.id, y)); setGroupFilter(''); } }}
                     className={`w-16 h-16 rounded-2xl text-2xl font-bold transition-all ${courseYear === y ? 'bg-uni-gold text-white shadow-lg' : exists ? 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50' : 'bg-gray-100 text-gray-300 border border-gray-100 cursor-default'}`}>
                     {y}
                   </button>
@@ -286,6 +300,21 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
               })}
               <span className="flex items-center text-xl text-gray-400 ml-1">{t('dept.courseYear') as string}</span>
             </div>
+            {availableSectors.length > 1 && (
+              <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-2xl p-1 shadow-sm">
+                {availableSectors.map(sector => (
+                  <button
+                    key={sector}
+                    onClick={() => { setSelectedSector(sector); setGroupFilter(''); setShowKeyboard(false); }}
+                    className={`h-12 min-w-16 px-5 rounded-xl text-base font-black transition-all ${activeSector === sector
+                      ? 'bg-uni-blue text-white shadow-sm'
+                      : 'text-gray-500 hover:bg-gray-50'}`}
+                  >
+                    {SECTOR_LABELS[sector] || sector.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            )}
             {schedule && schedule.groups.length > 0 && (
               <div className="flex items-center gap-2 ml-auto">
                 <button onClick={() => setShowKeyboard(v => !v)}
