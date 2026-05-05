@@ -1,13 +1,23 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import { adminFetch, apiFetch } from '../shared/api';
-import type { Announcement, Faculty, Department, DeptContent, Event as KioskEvent, CafeteriaCategory, InfoContent, KioskSettings, Schedule, ScheduleCell } from '../shared/types';
+import { normalizeAnnouncementTable, splitActiveItems, normalizeAnnouncementTheme, type AnnouncementTheme } from '../shared/announcementContent';
+import type { Announcement, Faculty, Department, DeptContent, Event as KioskEvent, CafeteriaCategory, InfoContent, KioskSettings, Schedule, ScheduleCell, FeedbackMessage } from '../shared/types';
 import {
   LogOut, Bell, Clock, CalendarDays, Coffee, Info, Plus, Trash2, Edit3, Save, X, ChevronRight, ChevronLeft,
-  GraduationCap, LayoutDashboard, Loader2, Users, Shield, ShieldCheck, Settings, Check, ChevronDown, Monitor, Table2
+  GraduationCap, LayoutDashboard, Loader2, Users, Shield, ShieldCheck, Settings, Check, ChevronDown, Monitor, Table2,
+  MessageSquare, RefreshCw, Archive, RotateCcw, ImagePlus
 } from 'lucide-react';
 
-type Tab = 'dashboard' | 'announcements' | 'faculties' | 'schedules' | 'events' | 'cafeteria' | 'info' | 'users' | 'settings' | 'devices';
+const ANNOUNCEMENT_THEME_OPTIONS: { value: AnnouncementTheme; label: string; chip: string }[] = [
+  { value: 'blue', label: 'Göy', chip: 'bg-blue-100 text-blue-700 border-blue-200' },
+  { value: 'emerald', label: 'Yaşıl', chip: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  { value: 'amber', label: 'Sarı', chip: 'bg-amber-100 text-amber-700 border-amber-200' },
+  { value: 'red', label: 'Qırmızı', chip: 'bg-red-100 text-red-700 border-red-200' },
+  { value: 'neutral', label: 'Neytral', chip: 'bg-gray-100 text-gray-700 border-gray-200' },
+];
+
+type Tab = 'dashboard' | 'announcements' | 'faculties' | 'schedules' | 'events' | 'cafeteria' | 'info' | 'feedback' | 'users' | 'settings' | 'devices';
 
 const ALL_PERMISSIONS: { key: string; label: string }[] = [
   { key: 'dashboard', label: 'Panel' },
@@ -17,6 +27,7 @@ const ALL_PERMISSIONS: { key: string; label: string }[] = [
   { key: 'events', label: 'Tədbirlər' },
   { key: 'cafeteria', label: 'Yeməkxana' },
   { key: 'info', label: 'Məlumat' },
+  { key: 'feedback', label: 'Təklif və iradlar' },
   { key: 'settings', label: 'Tənzimləmələr' },
   { key: 'users', label: 'İstifadəçilər' },
   { key: 'devices', label: 'Kiosklar' },
@@ -109,7 +120,7 @@ function CreatableSelect({ label, value, onChange, options, onCreateOption, load
 function FormModal({ title, children, onClose, onSave, saving }: { title: string; children: React.ReactNode; onClose: () => void; onSave: () => void; saving: boolean }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl p-8 max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl p-8 max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-xl font-bold text-gray-900">{title}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={24} /></button>
@@ -122,6 +133,119 @@ function FormModal({ title, children, onClose, onSave, saving }: { title: string
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ImageUploadField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  const [error, setError] = useState('');
+  const onFileChange = (file?: File) => {
+    setError('');
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Yalnız şəkil faylı seçin.');
+      return;
+    }
+    if (file.size > 2_500_000) {
+      setError('Şəkil 2.5 MB-dan böyükdür. Bir az kiçildib yükləyin.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => onChange(String(reader.result || ''));
+    reader.onerror = () => setError('Şəkil oxunmadı.');
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <div>
+      <label className="text-sm font-medium text-gray-700 mb-1 block">{label}</label>
+      <div className="flex items-center gap-3">
+        <label className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer">
+          <ImagePlus size={16} /> Şəkil seç
+          <input type="file" accept="image/*" className="hidden" onChange={event => onFileChange(event.target.files?.[0])} />
+        </label>
+        {value && (
+          <button type="button" onClick={() => onChange('')} className="px-3 py-2 rounded-xl bg-red-50 text-sm font-medium text-red-600 hover:bg-red-100">
+            Şəkli sil
+          </button>
+        )}
+      </div>
+      {value && <img src={value} alt="" className="mt-3 h-32 max-w-full rounded-xl border border-gray-100 object-contain bg-gray-50" />}
+      {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
+    </div>
+  );
+}
+
+function AnnouncementTableEditor({ headers, rows, onChange }: { headers: string[]; rows: string[][]; onChange: (headers: string[], rows: string[][]) => void }) {
+  const hasTable = headers.length > 0 || rows.length > 0;
+  const currentHeaders = headers.length > 0 ? headers : ['N0', 'Mövzu', 'Aparıcı', 'Tarix və saat'];
+  const currentRows = rows.length > 0 ? rows : [['', '', '', '']];
+
+  const setHeader = (index: number, value: string) => {
+    const next = currentHeaders.map((header, i) => i === index ? value : header);
+    onChange(next, currentRows.map(row => next.map((_, i) => row[i] ?? '')));
+  };
+
+  const setCell = (rowIndex: number, cellIndex: number, value: string) => {
+    const nextRows = currentRows.map((row, i) => i === rowIndex ? currentHeaders.map((_, j) => j === cellIndex ? value : (row[j] ?? '')) : currentHeaders.map((_, j) => row[j] ?? ''));
+    onChange(currentHeaders, nextRows);
+  };
+
+  const addRow = () => onChange(currentHeaders, [...currentRows, currentHeaders.map(() => '')]);
+  const removeRow = (index: number) => onChange(currentHeaders, currentRows.filter((_, i) => i !== index));
+  const clearTable = () => onChange([], []);
+
+  if (!hasTable) {
+    return (
+      <div className="rounded-2xl border border-dashed border-gray-200 p-4">
+        <button type="button" onClick={() => onChange(currentHeaders, currentRows)}
+          className="flex items-center gap-2 text-sm font-bold text-uni-blue hover:text-blue-900">
+          <Table2 size={16} /> Cədvəl əlavə et
+        </button>
+        <p className="text-xs text-gray-400 mt-1">Cədvəl boş qalarsa elanda yalnız mətn görünəcək.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <label className="text-sm font-medium text-gray-700">Cədvəl</label>
+        <button type="button" onClick={clearTable} className="text-xs font-bold text-red-600 hover:text-red-700">Cədvəli sil</button>
+      </div>
+      <div className="overflow-x-auto rounded-2xl border border-gray-200">
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              {currentHeaders.map((header, index) => (
+                <th key={index} className="p-2 min-w-36">
+                  <input value={header} onChange={event => setHeader(index, event.target.value)}
+                    className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm font-semibold outline-none focus:border-uni-blue" />
+                </th>
+              ))}
+              <th className="w-10" />
+            </tr>
+          </thead>
+          <tbody>
+            {currentRows.map((row, rowIndex) => (
+              <tr key={rowIndex} className="border-t border-gray-100">
+                {currentHeaders.map((_, cellIndex) => (
+                  <td key={cellIndex} className="p-2 min-w-36">
+                    <input value={row[cellIndex] ?? ''} onChange={event => setCell(rowIndex, cellIndex, event.target.value)}
+                      className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm outline-none focus:border-uni-blue" />
+                  </td>
+                ))}
+                <td className="p-2">
+                  <button type="button" onClick={() => removeRow(rowIndex)} className="p-1.5 text-gray-400 hover:text-red-600"><Trash2 size={14} /></button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <button type="button" onClick={addRow} className="mt-2 inline-flex items-center gap-1 text-sm font-bold text-uni-blue hover:text-blue-900">
+        <Plus size={14} /> Sətir əlavə et
+      </button>
     </div>
   );
 }
@@ -166,6 +290,7 @@ export default function AdminDashboard() {
   const [events, setEvents] = useState<KioskEvent[]>([]);
   const [cafeteria, setCafeteria] = useState<CafeteriaCategory[]>([]);
   const [info, setInfo] = useState<InfoContent[]>([]);
+  const [feedback, setFeedback] = useState<FeedbackMessage[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [settings, setSettings] = useState<KioskSettings>({ ticker_enabled: true, ticker_mode: 'scroll', ticker_pinned_id: null, default_language: 'az', sleep_screen_enabled: false });
   const [loading, setLoading] = useState(true);
@@ -183,9 +308,9 @@ export default function AdminDashboard() {
   const loadAll = useCallback(async () => {
     setLoading(true);
     const [a, ex, ev, c, i, s] = await Promise.all([
-      apiFetch<Announcement[]>('/announcements'),
+      (isSuperAdmin || hasPermission('announcements')) ? adminFetch<Announcement[]>('/announcements?include=all', token!) : apiFetch<Announcement[]>('/announcements'),
       apiFetch<Faculty[]>('/exams'),
-      apiFetch<KioskEvent[]>('/events'),
+      (isSuperAdmin || hasPermission('events')) ? adminFetch<KioskEvent[]>('/events?include=all', token!) : apiFetch<KioskEvent[]>('/events'),
       apiFetch<CafeteriaCategory[]>('/cafeteria'),
       apiFetch<InfoContent[]>('/info'),
       apiFetch<Record<string, any>>('/settings'),
@@ -198,6 +323,7 @@ export default function AdminDashboard() {
       default_language: s.default_language ?? 'az',
       kiosk_paused: s.kiosk_paused ?? false,
       sleep_screen_enabled: s.sleep_screen_enabled ?? false,
+      sync_requested_at: s.sync_requested_at ?? null,
     });
     // Force-logout check: if force_logout_at is newer than login time, kick out
     if (s.force_logout_at && loginTime && new Date(s.force_logout_at).getTime() > loginTime && !isSuperAdmin) {
@@ -210,8 +336,14 @@ export default function AdminDashboard() {
         setUsers(u);
       } catch {}
     }
+    if (isSuperAdmin || hasPermission('feedback')) {
+      try {
+        const f = await adminFetch<FeedbackMessage[]>('/feedback', token!);
+        setFeedback(f);
+      } catch {}
+    }
     setLoading(false);
-  }, [token, currentUser?.role]);
+  }, [token, currentUser?.role, currentUser?.permissions, currentUser?.faculty_ids, loginTime, isSuperAdmin]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -239,14 +371,18 @@ export default function AdminDashboard() {
     await adminFetch('/settings', token!, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ force_logout_at: new Date().toISOString() }) });
   };
 
+  const { active: activeAnnouncements } = splitActiveItems(announcements);
+  const { active: activeEvents } = splitActiveItems(events);
+
   const allTabs: { key: Tab; label: string; icon: React.ReactNode; count?: number; perm: string }[] = [
     { key: 'dashboard', label: 'Panel', icon: <LayoutDashboard size={20} />, perm: 'dashboard' },
-    { key: 'announcements', label: 'Elanlar', icon: <Bell size={20} />, count: announcements.length, perm: 'announcements' },
+    { key: 'announcements', label: 'Elanlar', icon: <Bell size={20} />, count: activeAnnouncements.length, perm: 'announcements' },
     { key: 'faculties', label: 'Fakültələr', icon: <Clock size={20} />, count: faculties.length, perm: 'faculties' },
     { key: 'schedules', label: 'Dərs Cədvəlləri', icon: <Table2 size={20} />, perm: 'schedules' },
-    { key: 'events', label: 'Tədbirlər', icon: <CalendarDays size={20} />, count: events.length, perm: 'events' },
+    { key: 'events', label: 'Tədbirlər', icon: <CalendarDays size={20} />, count: activeEvents.length, perm: 'events' },
     { key: 'cafeteria', label: 'Yeməkxana', icon: <Coffee size={20} />, perm: 'cafeteria' },
     { key: 'info', label: 'Məlumat', icon: <Info size={20} />, perm: 'info' },
+    { key: 'feedback', label: 'Təklif və iradlar', icon: <MessageSquare size={20} />, count: feedback.length, perm: 'feedback' },
     { key: 'settings', label: 'Tənzimləmələr', icon: <Settings size={20} />, perm: 'settings' },
     { key: 'users', label: 'İstifadəçilər', icon: <Users size={20} />, count: users.length, perm: 'users' },
     { key: 'devices', label: 'Kiosklar', icon: <Monitor size={20} />, perm: 'devices' },
@@ -316,14 +452,15 @@ export default function AdminDashboard() {
           <div className="flex items-center justify-center h-64"><Loader2 size={32} className="animate-spin text-uni-blue" /></div>
         ) : (
           <>
-            {tab === 'dashboard' && <DashboardView announcements={announcements} faculties={faculties} events={events} onNavigate={setTab} />}
+            {tab === 'dashboard' && <DashboardView announcements={activeAnnouncements} faculties={faculties} events={activeEvents} feedback={feedback} onNavigate={setTab} />}
             {tab === 'announcements' && <AnnouncementsManager items={announcements} token={token!} onRefresh={loadAll} faculties={faculties} allowedFacultyIds={allowedFacultyIds} />}
             {tab === 'faculties' && <FacultyManager faculties={faculties} token={token!} onRefresh={loadAll} />}
             {tab === 'schedules' && <ScheduleEditor faculties={faculties} token={token!} />}
             {tab === 'events' && <EventsManager items={events} token={token!} onRefresh={loadAll} />}
             {tab === 'cafeteria' && <CafeteriaManager items={cafeteria} token={token!} onRefresh={loadAll} />}
             {tab === 'info' && <InfoManager items={info} token={token!} onRefresh={loadAll} />}
-            {tab === 'settings' && <SettingsManager settings={settings} announcements={announcements} token={token!} onRefresh={loadAll} />}
+            {tab === 'feedback' && <FeedbackManager items={feedback} />}
+            {tab === 'settings' && <SettingsManager settings={settings} announcements={activeAnnouncements} token={token!} onRefresh={loadAll} />}
             {tab === 'users' && <UsersManager items={users} token={token!} onRefresh={loadAll} faculties={faculties} />}
             {tab === 'devices' && <DevicesManager token={token!} />}
           </>
@@ -334,16 +471,17 @@ export default function AdminDashboard() {
 }
 
 // ─── Dashboard ──────────────────────────────────────────
-function DashboardView({ announcements, faculties, events, onNavigate }: { announcements: Announcement[]; faculties: Faculty[]; events: KioskEvent[]; onNavigate: (t: Tab) => void }) {
+function DashboardView({ announcements, faculties, events, feedback, onNavigate }: { announcements: Announcement[]; faculties: Faculty[]; events: KioskEvent[]; feedback: FeedbackMessage[]; onNavigate: (t: Tab) => void }) {
   const stats = [
     { label: 'Elanlar', count: announcements.length, icon: <Bell size={24} />, color: 'bg-red-50 text-red-600', tab: 'announcements' as Tab },
     { label: 'Fakültələr', count: faculties.length, icon: <Clock size={24} />, color: 'bg-blue-50 text-blue-600', tab: 'faculties' as Tab },
     { label: 'Tədbirlər', count: events.length, icon: <CalendarDays size={24} />, color: 'bg-green-50 text-green-600', tab: 'events' as Tab },
+    { label: 'Təklif və iradlar', count: feedback.length, icon: <MessageSquare size={24} />, color: 'bg-amber-50 text-amber-600', tab: 'feedback' as Tab },
   ];
   return (
     <div>
       <h2 className="text-2xl font-bold text-gray-900 mb-8">İdarəetmə Paneli</h2>
-      <div className="grid grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-4 gap-6 mb-8">
         {stats.map(s => (
           <button key={s.label} onClick={() => onNavigate(s.tab)} className="bg-white rounded-2xl p-6 border border-gray-100 hover:shadow-lg transition-shadow text-left">
             <div className={"w-12 h-12 rounded-xl flex items-center justify-center mb-4 " + s.color}>{s.icon}</div>
@@ -368,11 +506,105 @@ function DashboardView({ announcements, faculties, events, onNavigate }: { annou
   );
 }
 
+function FeedbackManager({ items }: { items: FeedbackMessage[] }) {
+  const categoryLabel = (category: FeedbackMessage['category']) => category === 'irad' ? 'İrad' : 'Təklif';
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Təklif və iradlar</h2>
+          <p className="text-sm text-gray-500 mt-1">Kiosk QR formundan göndərilən son mesajlar</p>
+        </div>
+        <span className="rounded-full bg-amber-50 px-4 py-2 text-sm font-bold text-amber-700">{items.length} mesaj</span>
+      </div>
+
+      {items.length === 0 ? (
+        <div className="text-center py-16 text-gray-400 bg-white rounded-2xl border border-gray-100">
+          <MessageSquare size={48} className="mx-auto mb-4 opacity-50" />
+          <p className="text-lg font-medium">Hələ mesaj yoxdur</p>
+          <p className="text-sm mt-1">Tələbələr QR formundan yazdıqdan sonra burada görünəcək.</p>
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {items.map(item => (
+            <article key={item.id} className="bg-white rounded-2xl border border-gray-100 p-5">
+              <div className="flex items-start justify-between gap-4 mb-4">
+                <div className="flex items-center gap-3">
+                  <span className={"rounded-full px-3 py-1 text-xs font-bold " +
+                    (item.category === 'irad' ? "bg-red-50 text-red-700" : "bg-blue-50 text-blue-700")}>
+                    {categoryLabel(item.category)}
+                  </span>
+                  <span className="text-sm text-gray-400">{new Date(item.created_at).toLocaleString('az-AZ')}</span>
+                </div>
+              </div>
+              <p className="whitespace-pre-wrap text-gray-800 leading-7">{item.message}</p>
+              {(item.name || item.contact) && (
+                <div className="mt-4 flex flex-wrap gap-2 text-sm">
+                  {item.name && <span className="rounded-full bg-gray-100 px-3 py-1 font-medium text-gray-600">{item.name}</span>}
+                  {item.contact && <span className="rounded-full bg-gray-100 px-3 py-1 font-medium text-gray-600">{item.contact}</span>}
+                </div>
+              )}
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ArchiveList<T extends { id: number; title: string }>({ title, emptyText, count, items, renderMeta, canEdit, onRestore, onDelete }: {
+  title: string;
+  emptyText: string;
+  count: number;
+  items: T[];
+  renderMeta: (item: T) => string;
+  canEdit?: (item: T) => boolean;
+  onRestore: (id: number) => void;
+  onDelete: (id: number) => void;
+}) {
+  return (
+    <section className="mt-8">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-bold text-gray-900 flex items-center gap-2"><Archive size={18} /> {title}</h3>
+        <span className="text-xs font-bold px-3 py-1 rounded-full bg-gray-100 text-gray-600">{count}</span>
+      </div>
+      {items.length === 0 ? (
+        <div className="bg-white border border-dashed border-gray-200 rounded-2xl p-6 text-sm text-gray-400">{emptyText}</div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50 overflow-hidden">
+          {items.map(item => {
+            const editable = canEdit ? canEdit(item) : true;
+            return (
+              <div key={item.id} className={"flex items-center gap-4 px-5 py-4" + (!editable ? " opacity-60" : "")}>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-gray-900 truncate">{item.title}</p>
+                  <p className="text-xs text-gray-400 mt-1">{renderMeta(item)}</p>
+                </div>
+                <button onClick={() => editable && onRestore(item.id)} disabled={!editable}
+                  className={"px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-1 " + (editable ? "bg-blue-50 text-uni-blue hover:bg-blue-100" : "bg-gray-50 text-gray-300 cursor-not-allowed")}>
+                  <RotateCcw size={14} /> Bərpa et
+                </button>
+                <button onClick={() => editable && onDelete(item.id)} disabled={!editable}
+                  className={"px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-1 " + (editable ? "bg-red-50 text-red-600 hover:bg-red-100" : "bg-gray-50 text-gray-300 cursor-not-allowed")}>
+                  <Trash2 size={14} /> Sil
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ─── Settings Manager ───────────────────────────────────
 function SettingsManager({ settings, announcements, token, onRefresh }: { settings: KioskSettings; announcements: Announcement[]; token: string; onRefresh: () => void }) {
   const [local, setLocal] = useState<KioskSettings>(settings);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncSent, setSyncSent] = useState(false);
 
   const save = async () => {
     setSaving(true);
@@ -382,6 +614,17 @@ function SettingsManager({ settings, announcements, token, onRefresh }: { settin
       setTimeout(() => setSaved(false), 2000);
       onRefresh();
     } finally { setSaving(false); }
+  };
+
+  const requestKioskSync = async () => {
+    setSyncing(true);
+    try {
+      const result = await adminFetch<{ sync_requested_at: string }>('/settings?action=sync-signal', token, { method: 'POST', body: JSON.stringify({}) });
+      setLocal(prev => ({ ...prev, sync_requested_at: result.sync_requested_at }));
+      setSyncSent(true);
+      setTimeout(() => setSyncSent(false), 2500);
+      onRefresh();
+    } finally { setSyncing(false); }
   };
 
   return (
@@ -395,6 +638,25 @@ function SettingsManager({ settings, announcements, token, onRefresh }: { settin
       </div>
 
       <div className="space-y-6">
+        <div className="bg-white rounded-2xl border border-gray-100 p-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Kiosk məlumatları</h3>
+              <p className="text-sm text-gray-500 mt-1">
+                Elan və cədvəl dəyişəndən sonra kiosklara yenilənmə siqnalı göndər
+              </p>
+              {local.sync_requested_at && (
+                <p className="text-xs text-gray-400 mt-2">Son siqnal: {new Date(local.sync_requested_at).toLocaleString('az-AZ')}</p>
+              )}
+            </div>
+            <button onClick={requestKioskSync} disabled={syncing}
+              className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 disabled:opacity-50">
+              {syncing ? <Loader2 size={16} className="animate-spin" /> : syncSent ? <Check size={16} /> : <RefreshCw size={16} />}
+              {syncSent ? 'Siqnal göndərildi' : 'Kiosklara yenilə'}
+            </button>
+          </div>
+        </div>
+
         {/* Ticker */}
         <div className="bg-white rounded-2xl border border-gray-100 p-6">
           <h3 className="text-lg font-bold text-gray-900 mb-4">Elan Tikeri</h3>
@@ -481,7 +743,10 @@ function SettingsManager({ settings, announcements, token, onRefresh }: { settin
 function AnnouncementsManager({ items, token, onRefresh, faculties, allowedFacultyIds }: { items: Announcement[]; token: string; onRefresh: () => void; faculties: Faculty[]; allowedFacultyIds: number[] }) {
   const [editing, setEditing] = useState<Partial<Announcement> | null>(null);
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncSent, setSyncSent] = useState(false);
   const [types, setTypes] = useState<{ id: number; name: string }[]>([]);
+  const { active, archived } = splitActiveItems(items);
 
   useEffect(() => { apiFetch<{ id: number; name: string }[]>('/announcement-types').then(setTypes).catch(() => {}); }, []);
 
@@ -493,18 +758,40 @@ function AnnouncementsManager({ items, token, onRefresh, faculties, allowedFacul
   const save = async () => {
     setSaving(true);
     try {
+      const table = normalizeAnnouncementTable(editing?.table_headers, editing?.table_rows);
+      const payload = {
+        ...editing,
+        image_url: editing?.image_url || null,
+        table_headers: table?.headers ?? [],
+        table_rows: table?.rows ?? [],
+        theme: normalizeAnnouncementTheme(editing?.theme),
+      };
       if (editing?.id) {
-        await adminFetch('/announcements', token, { method: 'PUT', body: JSON.stringify(editing) });
+        await adminFetch('/announcements', token, { method: 'PUT', body: JSON.stringify(payload) });
       } else {
-        await adminFetch('/announcements', token, { method: 'POST', body: JSON.stringify(editing) });
+        await adminFetch('/announcements', token, { method: 'POST', body: JSON.stringify(payload) });
       }
       setEditing(null); onRefresh();
     } finally { setSaving(false); }
   };
 
+  const updateActive = async (id: number, active: boolean) => {
+    await adminFetch('/announcements', token, { method: 'PUT', body: JSON.stringify({ id, active }) });
+    onRefresh();
+  };
+
   const remove = async (id: number) => {
     await adminFetch('/announcements', token, { method: 'DELETE', body: JSON.stringify({ id }) });
     onRefresh();
+  };
+
+  const requestKioskSync = async () => {
+    setSyncing(true);
+    try {
+      await adminFetch('/settings?action=sync-signal', token, { method: 'POST', body: JSON.stringify({}) });
+      setSyncSent(true);
+      setTimeout(() => setSyncSent(false), 2500);
+    } finally { setSyncing(false); }
   };
 
   // Faculty-scoped: show all items, but only allow editing own faculty's items
@@ -518,10 +805,17 @@ function AnnouncementsManager({ items, token, onRefresh, faculties, allowedFacul
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Elanlar</h2>
-        <button onClick={() => setEditing({ importance: 'low', type: types[0]?.name || '', date: new Date().toISOString().slice(0, 10), faculty_id: defaultFacultyId })}
-          className="flex items-center gap-2 px-4 py-2.5 bg-uni-blue text-white rounded-xl font-medium hover:bg-blue-900">
-          <Plus size={18} /> Yeni elan
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={requestKioskSync} disabled={syncing}
+            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 disabled:opacity-50">
+            {syncing ? <Loader2 size={18} className="animate-spin" /> : syncSent ? <Check size={18} /> : <RefreshCw size={18} />}
+            {syncSent ? 'Göndərildi' : 'Kiosklara yenilə'}
+          </button>
+          <button onClick={() => setEditing({ importance: 'low', theme: 'blue', type: types[0]?.name || '', date: new Date().toISOString().slice(0, 10), faculty_id: defaultFacultyId, table_headers: [], table_rows: [], image_url: null })}
+            className="flex items-center gap-2 px-4 py-2.5 bg-uni-blue text-white rounded-xl font-medium hover:bg-blue-900">
+            <Plus size={18} /> Yeni elan
+          </button>
+        </div>
       </div>
       <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
         <table className="w-full">
@@ -536,19 +830,32 @@ function AnnouncementsManager({ items, token, onRefresh, faculties, allowedFacul
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {items.map(a => {
+            {active.map(a => {
               const fac = faculties.find(f => f.id === a.faculty_id);
               const editable = canEdit(a);
+              const table = normalizeAnnouncementTable(a.table_headers, a.table_rows);
+              const theme = ANNOUNCEMENT_THEME_OPTIONS.find(option => option.value === normalizeAnnouncementTheme(a.theme));
               return (
               <tr key={a.id} className={"hover:bg-gray-50" + (!editable ? " opacity-60" : "")}>
-                <td className="px-6 py-4 font-medium text-gray-900">{a.title}</td>
+                <td className="px-6 py-4 font-medium text-gray-900">
+                  <div>{a.title}</div>
+                  <div className="mt-1 flex gap-1.5">
+                    {table && <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">Cədvəl</span>}
+                    {a.image_url && <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">Şəkil</span>}
+                  </div>
+                </td>
                 <td className="px-6 py-4 text-gray-500 text-sm">{fac ? <span className="px-2 py-1 bg-blue-50 text-uni-blue rounded-lg text-xs font-medium">{fac.name}</span> : <span className="text-gray-400 text-xs">Ümumi</span>}</td>
                 <td className="px-6 py-4 text-gray-500">{a.type}</td>
-                <td className="px-6 py-4"><span className={"px-3 py-1 rounded-full text-xs font-bold " + (a.importance === 'high' ? 'bg-red-100 text-red-700' : a.importance === 'medium' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600')}>{a.importance === 'high' ? 'Yüksək' : a.importance === 'medium' ? 'Orta' : 'Aşağı'}</span></td>
+                <td className="px-6 py-4">
+                  <div className="flex flex-col gap-1.5">
+                    <span className={"px-3 py-1 rounded-full text-xs font-bold " + (a.importance === 'high' ? 'bg-red-100 text-red-700' : a.importance === 'medium' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600')}>{a.importance === 'high' ? 'Yüksək' : a.importance === 'medium' ? 'Orta' : 'Aşağı'}</span>
+                    {theme && <span className={"px-3 py-1 rounded-full text-xs font-bold border " + theme.chip}>{theme.label}</span>}
+                  </div>
+                </td>
                 <td className="px-6 py-4 text-gray-500">{a.date}</td>
                 <td className="px-6 py-4 flex gap-2 justify-end">
                   <button onClick={() => editable && setEditing(a)} disabled={!editable} className={"p-2 " + (editable ? "text-gray-400 hover:text-uni-blue" : "text-gray-200 cursor-not-allowed")}><Edit3 size={18} /></button>
-                  <button onClick={() => editable && remove(a.id)} disabled={!editable} className={"p-2 " + (editable ? "text-gray-400 hover:text-red-600" : "text-gray-200 cursor-not-allowed")}><Trash2 size={18} /></button>
+                  <button onClick={() => editable && updateActive(a.id, false)} disabled={!editable} className={"p-2 " + (editable ? "text-gray-400 hover:text-amber-600" : "text-gray-200 cursor-not-allowed")} title="Arxivlə"><Archive size={18} /></button>
                 </td>
               </tr>
               );
@@ -556,14 +863,32 @@ function AnnouncementsManager({ items, token, onRefresh, faculties, allowedFacul
           </tbody>
         </table>
       </div>
+      <ArchiveList
+        title="Arxiv elanlar"
+        emptyText="Arxivdə elan yoxdur"
+        count={archived.length}
+        items={archived}
+        renderMeta={item => item.date}
+        canEdit={canEdit}
+        onRestore={id => updateActive(id, true)}
+        onDelete={remove}
+      />
       {editing && (
         <FormModal title={editing.id ? 'Elanı redaktə et' : 'Yeni elan'} onClose={() => setEditing(null)} onSave={save} saving={saving}>
           <Input label="Başlıq" value={editing.title || ''} onChange={v => setEditing({ ...editing, title: v })} />
           <TextArea label="Təsvir" value={editing.description || ''} onChange={v => setEditing({ ...editing, description: v })} />
+          <ImageUploadField label="Şəkil" value={editing.image_url || ''} onChange={v => setEditing({ ...editing, image_url: v })} />
+          <AnnouncementTableEditor
+            headers={editing.table_headers || []}
+            rows={editing.table_rows || []}
+            onChange={(headers, rows) => setEditing({ ...editing, table_headers: headers, table_rows: rows })}
+          />
           <CreatableSelect label="Tip" value={editing.type || ''} onChange={v => setEditing({ ...editing, type: v })}
             options={types} onCreateOption={createType} />
           <Select label="Vaciblik" value={editing.importance || 'low'} onChange={v => setEditing({ ...editing, importance: v as any })}
             options={[{ value: 'high', label: 'Yüksək' }, { value: 'medium', label: 'Orta' }, { value: 'low', label: 'Aşağı' }]} />
+          <Select label="Rəng" value={normalizeAnnouncementTheme(editing.theme)} onChange={v => setEditing({ ...editing, theme: normalizeAnnouncementTheme(v) })}
+            options={ANNOUNCEMENT_THEME_OPTIONS.map(option => ({ value: option.value, label: option.label }))} />
           <Input label="Tarix" value={editing.date || ''} onChange={v => setEditing({ ...editing, date: v })} type="date" />
           {/* Faculty selector: hidden for single-faculty admins, visible for superadmin */}
           {(allowedFacultyIds.length !== 1) && (
@@ -1061,6 +1386,7 @@ function EventsManager({ items, token, onRefresh }: { items: KioskEvent[]; token
   const [editing, setEditing] = useState<Partial<KioskEvent> | null>(null);
   const [saving, setSaving] = useState(false);
   const [types, setTypes] = useState<{ id: number; name: string }[]>([]);
+  const { active, archived } = splitActiveItems(items);
 
   useEffect(() => { apiFetch<{ id: number; name: string }[]>('/event-types').then(setTypes).catch(() => {}); }, []);
 
@@ -1086,15 +1412,20 @@ function EventsManager({ items, token, onRefresh }: { items: KioskEvent[]; token
     onRefresh();
   };
 
+  const updateActive = async (id: number, active: boolean) => {
+    await adminFetch('/events', token, { method: 'PUT', body: JSON.stringify({ id, active }) });
+    onRefresh();
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Tədbirlər</h2>
-        <button onClick={() => setEditing({ type: types[0]?.name || '', date: new Date().toISOString().slice(0, 10) })}
+        <button onClick={() => setEditing({ type: types[0]?.name || '', date: new Date().toISOString().slice(0, 10), image_url: null })}
           className="flex items-center gap-2 px-4 py-2.5 bg-uni-blue text-white rounded-xl font-medium hover:bg-blue-900"><Plus size={18} /> Yeni tədbir</button>
       </div>
       <div className="grid grid-cols-2 gap-6">
-        {items.map(ev => (
+        {active.map(ev => (
           <div key={ev.id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
             {ev.image_url && <img src={ev.image_url} alt={ev.title} className="w-full h-48 object-cover" referrerPolicy="no-referrer" />}
             <div className="p-6">
@@ -1103,12 +1434,21 @@ function EventsManager({ items, token, onRefresh }: { items: KioskEvent[]; token
               <p className="text-sm text-gray-500 mb-4">{ev.date} &bull; {ev.time_slot} &bull; {ev.location}</p>
               <div className="flex gap-2">
                 <button onClick={() => setEditing(ev)} className="flex-1 px-4 py-2 text-sm font-medium text-uni-blue bg-blue-50 rounded-xl hover:bg-blue-100 flex items-center justify-center gap-1"><Edit3 size={14} /> Redaktə</button>
-                <button onClick={() => remove(ev.id)} className="px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-xl hover:bg-red-100"><Trash2 size={14} /></button>
+                <button onClick={() => updateActive(ev.id, false)} className="px-4 py-2 text-sm font-medium text-amber-600 bg-amber-50 rounded-xl hover:bg-amber-100 flex items-center gap-1"><Archive size={14} /> Arxiv</button>
               </div>
             </div>
           </div>
         ))}
       </div>
+      <ArchiveList
+        title="Arxiv tədbirlər"
+        emptyText="Arxivdə tədbir yoxdur"
+        count={archived.length}
+        items={archived}
+        renderMeta={item => `${item.date} · ${item.location}`}
+        onRestore={id => updateActive(id, true)}
+        onDelete={remove}
+      />
       {editing && (
         <FormModal title={editing.id ? 'Tədbiri redaktə et' : 'Yeni tədbir'} onClose={() => setEditing(null)} onSave={save} saving={saving}>
           <Input label="Başlıq" value={editing.title || ''} onChange={v => setEditing({ ...editing, title: v })} />
@@ -1118,7 +1458,7 @@ function EventsManager({ items, token, onRefresh }: { items: KioskEvent[]; token
           <Input label="Məkan" value={editing.location || ''} onChange={v => setEditing({ ...editing, location: v })} />
           <CreatableSelect label="Tip" value={editing.type || ''} onChange={v => setEditing({ ...editing, type: v })}
             options={types} onCreateOption={createType} />
-          <Input label="Şəkil URL" value={editing.image_url || ''} onChange={v => setEditing({ ...editing, image_url: v })} />
+          <ImageUploadField label="Şəkil" value={editing.image_url || ''} onChange={v => setEditing({ ...editing, image_url: v })} />
         </FormModal>
       )}
     </div>
@@ -1375,7 +1715,7 @@ function UsersManager({ items, token, onRefresh, faculties }: { items: AdminUser
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-900">İstifadəçilər</h2>
-        <button onClick={() => setEditing({ role: 'admin', permissions: ['dashboard', 'announcements', 'faculties', 'schedules', 'events', 'cafeteria', 'info'] })}
+        <button onClick={() => setEditing({ role: 'admin', permissions: ['dashboard', 'announcements', 'faculties', 'schedules', 'events', 'cafeteria', 'info', 'feedback'] })}
           className="flex items-center gap-2 px-4 py-2.5 bg-uni-blue text-white rounded-xl font-medium hover:bg-blue-900">
           <Plus size={18} /> Yeni istifadəçi
         </button>

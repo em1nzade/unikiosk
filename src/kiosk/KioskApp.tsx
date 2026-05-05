@@ -1,12 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import QRCode from 'qrcode';
 import { 
   Map, CalendarDays, GraduationCap, Info, Clock, ChevronLeft, ChevronRight,
   Home, Search, ArrowRight, Bell, Coffee, Globe, Building2, BookOpen, Megaphone, FileText,
-  MapPin
+  MapPin, MessageSquare, QrCode, Utensils, Salad, Cookie, CupSoda, Package
 } from 'lucide-react';
 import { useKioskData } from '../shared/useKioskData';
 import { useI18n, type Lang } from '../shared/i18n';
+import { buildFeedbackUrl } from '../shared/feedback';
+import { normalizeAnnouncementTable, normalizeAnnouncementTheme, type AnnouncementTheme } from '../shared/announcementContent';
 import type { Announcement, Faculty, Schedule, ScheduleCell, Event as KioskEvent, CafeteriaCategory, InfoContent, KioskSettings } from '../shared/types';
 import campusMapImage from '../../ChatGPT Image Apr 29, 2026, 10_29_39 PM.png';
 
@@ -15,6 +18,14 @@ const LANG_LABELS: Record<Lang, string> = { az: 'AZ', en: 'EN', ru: 'RU' };
 
 const AZ_MONTHS = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'İyun', 'İyul', 'Avqust', 'Sentyabr', 'Oktyabr', 'Noyabr', 'Dekabr'];
 const AZ_WEEKDAYS = ['Bazar', 'Bazar ertəsi', 'Çərşənbə axşamı', 'Çərşənbə', 'Cümə axşamı', 'Cümə', 'Şənbə'];
+
+const ANNOUNCEMENT_THEME_CLASSES: Record<AnnouncementTheme, { bg: string; border: string; iconBg: string; iconText: string; titleText: string; tagBg: string; tagText: string; tableHead: string }> = {
+  red: { bg: 'bg-red-50', border: 'border-red-200', iconBg: 'bg-red-200', iconText: 'text-red-600', titleText: 'text-red-900', tagBg: 'bg-red-600', tagText: 'text-white', tableHead: 'bg-red-700' },
+  amber: { bg: 'bg-amber-50', border: 'border-amber-200', iconBg: 'bg-amber-200', iconText: 'text-amber-600', titleText: 'text-amber-900', tagBg: 'bg-amber-500', tagText: 'text-white', tableHead: 'bg-amber-600' },
+  blue: { bg: 'bg-blue-50', border: 'border-blue-200', iconBg: 'bg-blue-200', iconText: 'text-blue-700', titleText: 'text-blue-950', tagBg: 'bg-blue-700', tagText: 'text-white', tableHead: 'bg-blue-800' },
+  emerald: { bg: 'bg-emerald-50', border: 'border-emerald-200', iconBg: 'bg-emerald-200', iconText: 'text-emerald-700', titleText: 'text-emerald-950', tagBg: 'bg-emerald-700', tagText: 'text-white', tableHead: 'bg-emerald-800' },
+  neutral: { bg: 'bg-slate-50', border: 'border-slate-200', iconBg: 'bg-slate-200', iconText: 'text-slate-600', titleText: 'text-slate-900', tagBg: 'bg-slate-600', tagText: 'text-white', tableHead: 'bg-uni-blue' },
+};
 
 const formatTime = (d: Date, lang: Lang) => {
   const h = d.getHours().toString().padStart(2, '0');
@@ -670,7 +681,7 @@ const HomeMenu = ({ onNavigate, announcements, settings }: { onNavigate: (v: str
   const itemVariants = { hidden: { opacity: 0, y: 30, scale: 0.95 }, show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring" as const, stiffness: 300, damping: 24 } } };
 
   return (
-    <div className="flex-1 pt-32 pb-10 px-12 overflow-hidden flex flex-col items-center justify-center gap-6 max-h-screen">
+    <div className="flex-1 pt-48 pb-10 px-12 overflow-hidden flex flex-col items-center justify-center gap-6 max-h-screen">
       {tickerEnabled && tickerAnnouncements.length > 0 && (
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} onClick={() => onNavigate('announcements')}
         className={`w-full max-w-7xl h-24 bg-gradient-to-r ${bannerConfig.bg} transition-colors duration-700 rounded-full flex items-center px-8 relative overflow-hidden shadow-2xl shrink-0 cursor-pointer border`}>
@@ -728,11 +739,11 @@ const HomeMenu = ({ onNavigate, announcements, settings }: { onNavigate: (v: str
         </motion.button>
 
         <motion.button variants={itemVariants} whileTap={{ scale: 0.98 }} onClick={() => onNavigate('events')}
-          className="col-span-2 row-span-1 rounded-[2.5rem] bg-emerald-700 relative overflow-hidden group shadow-xl text-left flex items-center p-8 gap-6">
-          <div className="glass-panel-dark w-16 h-16 rounded-2xl flex items-center justify-center text-emerald-400 shrink-0 z-10 transition-transform group-hover:scale-110"><CalendarDays size={32} /></div>
+          className="col-span-1 row-span-1 rounded-[2.5rem] bg-emerald-700 relative overflow-hidden group shadow-xl text-left flex flex-col justify-end p-8">
+          <div className="glass-panel-dark w-14 h-14 rounded-2xl flex items-center justify-center text-emerald-400 z-10 mb-4 transition-transform group-hover:scale-110"><CalendarDays size={28} /></div>
           <div className="relative z-10">
-            <h3 className="text-4xl font-bold text-white mb-2 text-shadow-md">{t('nav.events') as string}</h3>
-            <p className="text-xl text-emerald-100">{t('nav.events.desc') as string}</p>
+            <h3 className="text-3xl font-bold text-white mb-1 text-shadow-md">{t('nav.events') as string}</h3>
+            <p className="text-lg text-emerald-100">{t('nav.events.desc') as string}</p>
           </div>
         </motion.button>
 
@@ -744,7 +755,59 @@ const HomeMenu = ({ onNavigate, announcements, settings }: { onNavigate: (v: str
             <p className="text-lg text-orange-100">{t('nav.cafeteria.desc') as string}</p>
           </div>
         </motion.button>
+
+        <motion.button variants={itemVariants} whileTap={{ scale: 0.98 }} onClick={() => onNavigate('feedback')}
+          className="col-span-1 row-span-1 rounded-[2.5rem] bg-white p-8 relative overflow-hidden group shadow-xl text-left flex flex-col justify-end border border-gray-100">
+          <div className="absolute right-5 top-5 text-uni-gold/15 transition-transform duration-500 group-hover:scale-110"><QrCode size={92} /></div>
+          <div className="relative z-10">
+            <div className="bg-uni-gold/15 w-14 h-14 rounded-2xl flex items-center justify-center text-uni-blue mb-4 transition-colors group-hover:bg-uni-gold group-hover:text-white"><MessageSquare size={28} /></div>
+            <h3 className="text-3xl font-bold text-uni-blue mb-1">{t('nav.feedback') as string}</h3>
+            <p className="text-lg text-gray-500">{t('nav.feedback.desc') as string}</p>
+          </div>
+        </motion.button>
       </motion.div>
+    </div>
+  );
+};
+
+const FeedbackQrView = () => {
+  const { t } = useI18n();
+  const [qrDataUrl, setQrDataUrl] = useState('');
+  const feedbackUrl = buildFeedbackUrl(window.location.href);
+
+  useEffect(() => {
+    let cancelled = false;
+    QRCode.toDataURL(feedbackUrl, { width: 520, margin: 1, color: { dark: '#0A2540', light: '#FFFFFF' } })
+      .then(url => { if (!cancelled) setQrDataUrl(url); })
+      .catch(() => { if (!cancelled) setQrDataUrl(''); });
+    return () => { cancelled = true; };
+  }, [feedbackUrl]);
+
+  return (
+    <div className="flex-1 pt-44 pb-12 px-12 overflow-y-auto">
+      <div className="max-w-6xl mx-auto grid grid-cols-[1fr_460px] gap-12 items-center min-h-full">
+        <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}>
+          <div className="w-24 h-24 bg-uni-gold/15 rounded-[2rem] flex items-center justify-center text-uni-blue mb-8">
+            <MessageSquare size={50} />
+          </div>
+          <h3 className="text-6xl font-bold text-uni-blue leading-tight mb-6">{t('nav.feedback') as string}</h3>
+          <p className="text-3xl leading-relaxed text-gray-600 max-w-2xl">
+            QR kodu telefonla oxudun, mesajını rahat yazıb göndər.
+          </p>
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
+          className="bg-white rounded-[2.5rem] p-8 shadow-2xl border border-gray-100">
+          <div className="aspect-square rounded-[2rem] bg-gray-50 border border-gray-100 flex items-center justify-center overflow-hidden">
+            {qrDataUrl ? (
+              <img src={qrDataUrl} alt="Təklif və iradlar QR kodu" className="w-full h-full p-6" />
+            ) : (
+              <QrCode size={180} className="text-gray-300" />
+            )}
+          </div>
+          <p className="mt-6 text-center text-lg font-semibold text-gray-500">Telefon kameranı QR koda yönəlt.</p>
+        </motion.div>
+      </div>
     </div>
   );
 };
@@ -857,36 +920,112 @@ const EventsView = ({ events }: { events: KioskEvent[] }) => {
 // --- Cafeteria View ---
 const CafeteriaView = ({ menu }: { menu: CafeteriaCategory[] }) => {
   const { t } = useI18n();
-  const totalPrice = menu.find(c => c.highlight)?.items.reduce((sum, item) => sum + (item.price || 0), 0);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(menu[0]?.id ?? null);
+
+  useEffect(() => {
+    if (menu.length === 0) {
+      setSelectedCategoryId(null);
+      return;
+    }
+    if (!menu.some(category => category.id === selectedCategoryId)) {
+      setSelectedCategoryId(menu[0].id);
+    }
+  }, [menu, selectedCategoryId]);
+
+  const selectedCategory = menu.find(category => category.id === selectedCategoryId) ?? menu[0];
+  const totalItems = menu.reduce((sum, category) => sum + category.items.length, 0);
+  const totalPrice = selectedCategory?.items.reduce((sum, item) => sum + (item.price || 0), 0) ?? 0;
+  const formatMenuPrice = (price: number | null) => {
+    if (price === null) return '';
+    return `${Number(price).toLocaleString('az-AZ', { minimumFractionDigits: price % 1 === 0 ? 0 : 1, maximumFractionDigits: 2 })} ₼`;
+  };
+  const categoryIcon = (name: string) => {
+    const lowerName = name.toLowerCase();
+    if (lowerName.includes('içki')) return <CupSoda size={34} />;
+    if (lowerName.includes('salat')) return <Salad size={34} />;
+    if (lowerName.includes('atış')) return <Cookie size={34} />;
+    if (lowerName.includes('digər')) return <Package size={34} />;
+    return <Utensils size={34} />;
+  };
+
+  if (menu.length === 0) {
+    return (
+      <div className="flex-1 pt-40 pb-12 px-12 overflow-y-auto">
+        <div className="max-w-5xl mx-auto bg-white rounded-[2rem] border border-gray-100 p-14 text-center shadow-sm">
+          <div className="w-24 h-24 bg-orange-50 rounded-3xl flex items-center justify-center mx-auto mb-6">
+            <Coffee size={48} className="text-orange-500" />
+          </div>
+          <h3 className="text-4xl font-bold text-uni-blue mb-3">{t('cafeteria.title') as string}</h3>
+          <p className="text-xl text-gray-500">Menyu hələ əlavə edilməyib.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex-1 pt-40 pb-12 px-12 flex flex-col items-center justify-center">
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-16 rounded-[3rem] shadow-xl max-w-4xl w-full text-center relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-3 bg-gradient-to-r from-orange-400 to-red-500"></div>
-        <div className="w-32 h-32 bg-orange-50 rounded-[2rem] flex items-center justify-center mx-auto mb-10 rotate-3"><Coffee size={64} className="text-orange-500 -rotate-3" /></div>
-        <h3 className="text-5xl font-bold text-uni-blue mb-6">{t('cafeteria.title') as string}</h3>
-        <p className="text-2xl text-gray-500 mb-12 leading-relaxed max-w-2xl mx-auto">{t('cafeteria.desc') as string}</p>
-        <div className="grid grid-cols-2 gap-8 mb-4">
-          {menu.map(cat => (
-            <div key={cat.id} className={`p-10 border-2 border-gray-100 rounded-[2rem] text-left hover:border-orange-400 hover:shadow-lg transition-all group ${cat.highlight ? 'bg-orange-50/30' : ''}`}>
-              <h4 className={`text-3xl font-bold text-uni-blue mb-6 group-hover:text-orange-500 border-b ${cat.highlight ? 'border-orange-100' : 'border-gray-100'} pb-4`}>{cat.name}</h4>
-              <ul className="text-xl text-gray-600 space-y-4 font-medium">
-                {cat.items.map(item => (
-                  <li key={item.id} className="flex justify-between items-center">
-                    <span>{item.name}</span>
-                    {item.price !== null && <strong className="text-gray-900">{Number(item.price).toFixed(2)} &#8380;</strong>}
-                  </li>
-                ))}
-              </ul>
-              {cat.highlight && totalPrice != null && (
-                <div className="mt-8 bg-orange-100 text-orange-800 py-3 px-6 rounded-xl font-bold text-2xl flex justify-between items-center shadow-sm">
-                  <span>{t('cafeteria.total') as string}:</span><span>{totalPrice.toFixed(2)} &#8380;</span>
-                </div>
-              )}
+    <div className="flex-1 pt-44 pb-10 px-10 overflow-hidden">
+      <div className="max-w-[92rem] mx-auto h-full flex flex-col gap-7">
+        <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }}
+          className="flex items-end justify-between gap-8">
+          <div>
+            <div className="inline-flex items-center gap-3 px-5 py-2.5 rounded-full bg-orange-50 text-orange-700 font-bold text-lg mb-4">
+              <Coffee size={24} /> {totalItems} məhsul
             </div>
-          ))}
+            <h3 className="text-5xl font-bold text-uni-blue mb-3">{t('cafeteria.title') as string}</h3>
+            <p className="text-xl text-gray-500 max-w-3xl">{t('cafeteria.desc') as string}</p>
+          </div>
+          {selectedCategory && (
+            <div className="bg-white border border-orange-100 rounded-[2rem] px-7 py-5 shadow-sm text-right min-w-72">
+              <p className="text-sm font-black uppercase tracking-wider text-orange-500 mb-1">{selectedCategory.name}</p>
+              <p className="text-3xl font-black text-uni-blue">{selectedCategory.items.length} seçim</p>
+              <p className="text-base text-gray-400 mt-1">{t('cafeteria.total') as string}: {formatMenuPrice(totalPrice)}</p>
+            </div>
+          )}
+        </motion.div>
+
+        <div className="grid grid-cols-[19rem_1fr] gap-6 min-h-0 flex-1">
+          <motion.nav initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
+            className="flex flex-col gap-3 overflow-y-auto pr-1">
+            {menu.map(category => {
+              const active = category.id === selectedCategory?.id;
+              return (
+                <button key={category.id} onClick={() => setSelectedCategoryId(category.id)}
+                  className={`min-h-28 rounded-[1.5rem] px-5 py-4 text-left border transition-all flex items-center gap-4 ${active
+                    ? 'bg-uni-blue text-white border-uni-blue shadow-lg'
+                    : 'bg-white text-gray-600 border-gray-100 hover:border-orange-200 hover:shadow-md'}`}>
+                  <span className={`w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 ${active ? 'bg-white/15 text-uni-gold' : 'bg-orange-50 text-orange-500'}`}>
+                    {categoryIcon(category.name)}
+                  </span>
+                  <span className="min-w-0">
+                    <span className={`block text-2xl font-black leading-tight ${active ? 'text-white' : 'text-uni-blue'}`}>{category.name}</span>
+                    <span className={`block text-base font-semibold mt-1 ${active ? 'text-blue-100' : 'text-gray-400'}`}>{category.items.length} məhsul</span>
+                  </span>
+                </button>
+              );
+            })}
+          </motion.nav>
+
+          <motion.div key={selectedCategory?.id} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
+            className="min-h-0 overflow-y-auto">
+            {selectedCategory && (
+              <div className="grid grid-cols-3 gap-4 pb-2">
+                {selectedCategory.items.map((item, index) => (
+                  <motion.div key={item.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(index * 0.015, 0.18) }}
+                    className="min-h-36 bg-white border border-gray-100 rounded-[1.5rem] p-6 shadow-sm flex flex-col justify-between">
+                    <h4 className="text-2xl font-black text-gray-900 leading-snug break-words">{item.name}</h4>
+                    <div className="flex items-center justify-between gap-4 mt-6">
+                      <span className="text-sm font-bold uppercase tracking-wider text-gray-400">Qiymət</span>
+                      {item.price !== null && (
+                        <strong className="text-3xl font-black text-orange-600 whitespace-nowrap">{formatMenuPrice(item.price)}</strong>
+                      )}
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </motion.div>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 };
@@ -900,22 +1039,48 @@ const AnnouncementsView = ({ announcements }: { announcements: Announcement[] })
     <div className="flex-1 pt-40 pb-12 px-12 overflow-y-auto">
       <div className="max-w-6xl mx-auto space-y-6">
         {sorted.map((ann, i) => {
-          let colors = { bg: 'bg-slate-50', border: 'border-slate-200', iconBg: 'bg-slate-200', iconText: 'text-slate-600', titleText: 'text-slate-900', tagBg: 'bg-slate-600', tagText: 'text-white' };
-          if (ann.importance === 'high') colors = { bg: 'bg-red-50', border: 'border-red-200', iconBg: 'bg-red-200', iconText: 'text-red-600', titleText: 'text-red-900', tagBg: 'bg-red-600', tagText: 'text-white' };
-          else if (ann.importance === 'medium') colors = { bg: 'bg-amber-50', border: 'border-amber-200', iconBg: 'bg-amber-200', iconText: 'text-amber-600', titleText: 'text-amber-900', tagBg: 'bg-amber-500', tagText: 'text-white' };
+          const colors = ANNOUNCEMENT_THEME_CLASSES[normalizeAnnouncementTheme(ann.theme)];
+          const table = normalizeAnnouncementTable(ann.table_headers, ann.table_rows);
 
           return (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} key={ann.id}
-              className={`rounded-[2.5rem] p-8 shadow-sm border-2 ${colors.border} ${colors.bg} flex items-center gap-8 relative overflow-hidden group`}>
-              <div className={`w-20 h-20 ${colors.iconBg} rounded-2xl flex items-center justify-center shrink-0`}><Bell size={40} className={colors.iconText} /></div>
-              <div className="flex-1">
+              className={`rounded-[2.5rem] p-8 shadow-sm border-2 ${colors.border} ${colors.bg} relative overflow-hidden group`}>
+              <div className="flex items-start gap-8">
+                <div className={`w-20 h-20 ${colors.iconBg} rounded-2xl flex items-center justify-center shrink-0`}><Bell size={40} className={colors.iconText} /></div>
+                <div className="flex-1">
                 <div className="flex items-center gap-4 mb-3">
                   <span className={`px-4 py-1.5 rounded-full text-sm font-bold uppercase tracking-wider ${colors.tagBg} ${colors.tagText}`}>{ann.type}</span>
                   <span className="text-xl font-medium text-gray-500">{ann.date}</span>
                 </div>
                 <h3 className={`text-4xl font-bold mb-3 ${colors.titleText}`}>{ann.title}</h3>
                 <p className="text-2xl text-gray-700 leading-relaxed max-w-4xl">{ann.description}</p>
+                </div>
+                {ann.image_url && (
+                  <img src={ann.image_url} alt={ann.title} className="w-64 max-h-44 rounded-3xl object-contain bg-white/70 border border-white/70" referrerPolicy="no-referrer" />
+                )}
               </div>
+              {table && (
+                <div className="mt-8 overflow-hidden rounded-3xl border border-white/70 bg-white/80">
+                  <table className="w-full text-left">
+                    <thead className={`${colors.tableHead} text-white`}>
+                      <tr>
+                        {table.headers.map((header, headerIndex) => (
+                          <th key={`${header}-${headerIndex}`} className={"px-5 py-4 text-xl font-black " + (headerIndex === table.headers.length - 1 ? "w-44 text-center" : "")}>{header}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {table.rows.map((row, rowIndex) => (
+                        <tr key={rowIndex} className="bg-white/80">
+                          {row.map((cell, cellIndex) => (
+                            <td key={cellIndex} className={"px-5 py-4 text-xl font-semibold text-gray-800 leading-snug whitespace-pre-line " + (cellIndex === row.length - 1 ? "w-44 text-center" : "")}>{cell}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </motion.div>
           );
         })}
@@ -1106,6 +1271,7 @@ export default function KioskApp() {
       case 'cafeteria': return <CafeteriaView menu={data.cafeteria} />;
       case 'announcements': return <AnnouncementsView announcements={data.announcements} />;
       case 'info': return <InfoView info={data.info} />;
+      case 'feedback': return <FeedbackQrView />;
       default: return <HomeMenu onNavigate={setCurrentView} announcements={data.announcements} settings={data.settings} />;
     }
   };
@@ -1113,7 +1279,8 @@ export default function KioskApp() {
   const getViewTitle = () => {
     const titleKeys: Record<string, string> = {
       map: 'title.map', faculties: 'title.faculties', events: 'title.events',
-      cafeteria: 'title.cafeteria', info: 'title.info', announcements: 'title.announcements'
+      cafeteria: 'title.cafeteria', info: 'title.info', announcements: 'title.announcements',
+      feedback: 'title.feedback'
     };
     const key = titleKeys[currentView];
     return key ? (t(key as any) as string) : (t('nav.home') as string);

@@ -8,6 +8,7 @@ const ROOT = process.cwd();
 const FALLBACK_JSON = '/Users/barbie/Documents/New project 4/sorgular/outputs/kiosk-schedule-all-times.json';
 const EXCEL_DIR = path.join(ROOT, 'exceller');
 const PDF_ROWS_JSON = path.join(ROOT, 'scripts', 'pdf-schedule-rows.json');
+const NATURE_DOCX_ROWS_JSON = path.join(ROOT, 'scripts', 'nature-docx-schedule-rows.json');
 
 const FACULTIES = [
   { key: 'humanitar', name: 'Humanitar, təhsil və dillər fakültəsi', aliases: ['Humanitar, təhsil və dillər'] },
@@ -80,6 +81,8 @@ function inferSector(group, faculty) {
 
 function normalizeRoom(value) {
   const text = oneLine(value).replace(/^Auditoriya\s*[:\-]?\s*/i, '').replace(/^Otaq\s*[:\-]?\s*/i, '');
+  const namedRoom = text.match(/\b(?:Dizayn\s*mərkəzi|Design\s*center)\s*-?\s*\d+\b/iu);
+  if (namedRoom) return namedRoom[0].replace(/\s*-\s*/g, '-');
   const match = text.match(/\b\d{2,4}[A-Za-zƏÖÜĞÇŞİəöüğçşı/-]*\b/u);
   return match ? match[0] : '';
 }
@@ -164,6 +167,14 @@ function readEconomicsSeedRows() {
 function readPdfRows() {
   if (!fs.existsSync(PDF_ROWS_JSON)) return [];
   const source = JSON.parse(fs.readFileSync(PDF_ROWS_JSON, 'utf8'));
+  const rows = [];
+  for (const row of source) addRow(rows, row);
+  return rows;
+}
+
+function readNatureDocxRows() {
+  if (!fs.existsSync(NATURE_DOCX_ROWS_JSON)) return [];
+  const source = JSON.parse(fs.readFileSync(NATURE_DOCX_ROWS_JSON, 'utf8'));
   const rows = [];
   for (const row of source) addRow(rows, row);
   return rows;
@@ -360,10 +371,11 @@ async function importSchedules(sql, schedules) {
   return imported;
 }
 
+const natureDocxRows = readNatureDocxRows();
 const rows = [
   ...readFallbackRows(),
   ...readEconomicsSeedRows(),
-  ...readNatureRows(),
+  ...(natureDocxRows.length ? natureDocxRows : readNatureRows()),
   ...readPdfRows(),
 ];
 const { schedules, duplicateRows, duplicateCellEntries } = buildSchedules(rows);

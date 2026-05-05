@@ -10,3 +10,4 @@ db
 
 .vercel
 release
+.env*.local

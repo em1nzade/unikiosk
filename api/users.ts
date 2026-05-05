@@ -45,7 +45,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { email, password, name, role, permissions } = req.body;
       if (!email || !password || !name) return res.status(400).json({ error: 'Email, şifrə və ad tələb olunur' });
       const passwordHash = await hash(password, 10);
-      const perms = permissions || (role === 'superadmin' ? '["dashboard","announcements","exams","events","cafeteria","info","settings","users"]' : '["dashboard","announcements","exams","events","cafeteria","info"]');
+      const perms = permissions || (role === 'superadmin'
+        ? ['dashboard', 'announcements', 'faculties', 'schedules', 'events', 'cafeteria', 'info', 'feedback', 'settings', 'users', 'devices']
+        : ['dashboard', 'announcements', 'faculties', 'schedules', 'events', 'cafeteria', 'info', 'feedback']);
       const rows = await sql`INSERT INTO admin_users (email, password_hash, name, role, permissions) VALUES (${email}, ${passwordHash}, ${name}, ${role || 'admin'}, ${JSON.stringify(perms)}) RETURNING id, email, name, role, active, permissions, created_at`;
       return res.status(201).json(rows[0]);
     }

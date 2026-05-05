@@ -22,6 +22,10 @@ const CHECK_INTERVAL_MS = 60_000; // check every 60 seconds
 const ALLOWED_ORIGINS = ['file://', 'http://localhost', REMOTE_URL];
 const EXIT_PIN = '1453';
 
+app.commandLine.appendSwitch('disable-pinch');
+app.commandLine.appendSwitch('overscroll-history-navigation', '0');
+app.commandLine.appendSwitch('disable-features', 'OverscrollHistoryNavigation');
+
 let mainWindow;
 let lastBuildId = null;
 let versionTimer = null;
@@ -64,6 +68,31 @@ function startVersionPolling() {
 
 function stopVersionPolling() {
   if (versionTimer) { clearInterval(versionTimer); versionTimer = null; }
+}
+
+function enforceKioskMode() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.setFullScreen(true);
+  mainWindow.setKiosk(true);
+  mainWindow.setAlwaysOnTop(true);
+  if (!mainWindow.isFocused()) {
+    mainWindow.focus();
+  }
+}
+
+function blockKioskShortcuts() {
+  [
+    'Alt+F4',
+    'Alt+Esc',
+    'CommandOrControl+W',
+    'CommandOrControl+Q',
+    'CommandOrControl+R',
+    'CommandOrControl+Shift+R',
+    'F11',
+    'Escape',
+  ].forEach((accelerator) => {
+    try { globalShortcut.register(accelerator, () => {}); } catch {}
+  });
 }
 
 // ── Window ──────────────────────────────────────────────
@@ -124,8 +153,15 @@ function createWindow() {
     stopVersionPolling();
   });
 
+  ['blur', 'leave-full-screen', 'restore', 'show'].forEach((eventName) => {
+    mainWindow.on(eventName, () => {
+      setTimeout(enforceKioskMode, 250);
+    });
+  });
+
   // Start polling after the page finishes loading
   mainWindow.webContents.on('did-finish-load', () => {
+    enforceKioskMode();
     startVersionPolling();
   });
 }
@@ -146,6 +182,7 @@ ipcMain.handle('get-device-id', () => {
 // ── App lifecycle ───────────────────────────────────────
 app.on('ready', () => {
   createWindow();
+  blockKioskShortcuts();
 
   const gotTheLock = app.requestSingleInstanceLock();
   if (!gotTheLock) {

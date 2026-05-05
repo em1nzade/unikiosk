@@ -1,7 +1,27 @@
 import { neon } from '@neondatabase/serverless';
 import bcrypt from 'bcryptjs';
 
-const sql = neon('postgresql://neondb_owner:npg_lRcmopiQH25C@ep-square-scene-altol7k9.c-3.eu-central-1.aws.neon.tech/neondb?sslmode=require');
+if (!process.env.DATABASE_URL) {
+  console.error('DATABASE_URL is required.');
+  process.exit(1);
+}
+
+const sql = neon(process.env.DATABASE_URL);
+const adminEmail = process.env.ADMIN_EMAIL || 'admin@oyu.edu.az';
+const adminPassword = process.env.ADMIN_PASSWORD || 'Admin123!';
+const superadminPermissions = [
+  'dashboard',
+  'announcements',
+  'faculties',
+  'schedules',
+  'events',
+  'cafeteria',
+  'info',
+  'feedback',
+  'settings',
+  'users',
+  'devices',
+];
 
 await sql`
   CREATE TABLE IF NOT EXISTS admin_users (
@@ -17,9 +37,27 @@ await sql`
 `;
 console.log('Table created');
 
-const hash = await bcrypt.hash('Admin123!', 10);
-await sql`INSERT INTO admin_users (email, password_hash, name, role) VALUES ('admin@oyu.edu.az', ${hash}, 'Admin', 'superadmin') ON CONFLICT (email) DO NOTHING`;
-console.log('Default admin inserted');
+try {
+  await sql`ALTER TABLE admin_users ADD COLUMN permissions JSONB DEFAULT '[]'::jsonb`;
+  console.log('Permissions column added');
+} catch (err) {
+  if (!String(err?.message || err).includes('already exists')) {
+    throw err;
+  }
+}
+
+const hash = await bcrypt.hash(adminPassword, 10);
+await sql`
+  INSERT INTO admin_users (email, password_hash, name, role, active, permissions)
+  VALUES (${adminEmail}, ${hash}, 'Admin', 'superadmin', true, ${JSON.stringify(superadminPermissions)})
+  ON CONFLICT (email) DO UPDATE SET
+    password_hash = EXCLUDED.password_hash,
+    role = EXCLUDED.role,
+    active = true,
+    permissions = EXCLUDED.permissions,
+    updated_at = NOW()
+`;
+console.log(`Admin user upserted and password reset for ${adminEmail}`);
 
 const rows = await sql`SELECT id, email, name, role, active FROM admin_users`;
 console.log('Users:', JSON.stringify(rows));

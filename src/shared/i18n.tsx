@@ -20,6 +20,8 @@ const translations = {
   'nav.events.desc': { az: 'Bütün tədbirlər üçün qeydiyyat', en: 'Registration for all events', ru: 'Регистрация на мероприятия' },
   'nav.cafeteria': { az: 'Yeməkxana', en: 'Cafeteria', ru: 'Столовая' },
   'nav.cafeteria.desc': { az: 'Gündəlik menyu', en: 'Daily menu', ru: 'Меню дня' },
+  'nav.feedback': { az: 'Təklif və İradlar', en: 'Suggestions & Feedback', ru: 'Предложения и отзывы' },
+  'nav.feedback.desc': { az: 'QR kodu telefonla oxudub yazın', en: 'Scan the QR code and write from your phone', ru: 'Отсканируйте QR-код и напишите с телефона' },
   'nav.announcements': { az: 'Universitet üzrə Elanlar', en: 'University Announcements', ru: 'Объявления университета' },
 
   // Header titles
@@ -29,6 +31,7 @@ const translations = {
   'title.cafeteria': { az: 'Tələbə Yeməkxanası', en: 'Student Cafeteria', ru: 'Студенческая столовая' },
   'title.info': { az: 'Ümumi Məlumat', en: 'General Information', ru: 'Общая информация' },
   'title.announcements': { az: 'Universitet üzrə Elanlar', en: 'University Announcements', ru: 'Объявления' },
+  'title.feedback': { az: 'Təklif və İradlar', en: 'Suggestions & Feedback', ru: 'Предложения и отзывы' },
 
   // Faculty browser
   'faculty.title': { az: 'Fakültələr', en: 'Faculties', ru: 'Факультеты' },

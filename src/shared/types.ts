@@ -7,6 +7,10 @@ export interface Announcement {
   date: string;
   active: boolean;
   faculty_id?: number | null;
+  image_url?: string | null;
+  table_headers?: string[] | null;
+  table_rows?: string[][] | null;
+  theme?: 'red' | 'amber' | 'blue' | 'emerald' | 'neutral' | null;
 }
 
 export interface DeptContent {
@@ -75,6 +79,17 @@ export interface InfoContent {
   sort_order: number;
 }
 
+export interface FeedbackMessage {
+  id: number;
+  category: 'teklif' | 'irad';
+  message: string;
+  name: string | null;
+  contact: string | null;
+  status: 'new' | 'read';
+  user_agent: string | null;
+  created_at: string;
+}
+
 export interface KioskData {
   announcements: Announcement[];
   faculties: Faculty[];
@@ -109,4 +124,5 @@ export interface KioskSettings {
   default_language: string;
   kiosk_paused?: boolean;
   sleep_screen_enabled?: boolean;
+  sync_requested_at?: string | null;
 }

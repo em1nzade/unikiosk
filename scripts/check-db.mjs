@@ -1,6 +1,11 @@
 import { neon } from '@neondatabase/serverless';
 
-const sql = neon('postgresql://neondb_owner:npg_lRcmopiQH25C@ep-square-scene-altol7k9.c-3.eu-central-1.aws.neon.tech/neondb?sslmode=require');
+if (!process.env.DATABASE_URL) {
+  console.error('DATABASE_URL is required.');
+  process.exit(1);
+}
+
+const sql = neon(process.env.DATABASE_URL);
 
 // List all tables
 const tables = await sql`SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog','information_schema') ORDER BY table_schema, table_name`;

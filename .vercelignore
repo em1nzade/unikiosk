@@ -7,3 +7,6 @@ dist
 _write_admin.cjs
 package-lock.json
 scripts
+exceller
+outputs
+senedler

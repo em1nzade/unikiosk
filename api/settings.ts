@@ -69,6 +69,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(405).json({ error: 'Method not allowed' });
     }
 
+    if (action === 'sync-signal') {
+      if (req.method === 'GET') {
+        const rows = await sql`SELECT value FROM kiosk_settings WHERE key = 'sync_requested_at' LIMIT 1`;
+        return res.json({ sync_requested_at: rows[0]?.value ?? null });
+      }
+      if (!(await verifyAdmin(req))) return res.status(401).json({ error: 'Unauthorized' });
+      if (req.method === 'POST') {
+        const syncRequestedAt = new Date().toISOString();
+        await sql`INSERT INTO kiosk_settings (key, value, updated_at) VALUES ('sync_requested_at', ${JSON.stringify(syncRequestedAt)}, NOW())
+          ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(syncRequestedAt)}, updated_at = NOW()`;
+        return res.json({ sync_requested_at: syncRequestedAt });
+      }
+      return res.status(405).json({ error: 'Method not allowed' });
+    }
+
     // ── Global settings ──
     if (req.method === 'GET') {
       const rows = await sql`SELECT key, value FROM kiosk_settings`;

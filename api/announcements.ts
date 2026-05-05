@@ -28,12 +28,25 @@ async function verifyAdmin(req: VercelRequest): Promise<{ ok: false } | { ok: tr
   } catch { return { ok: false }; }
 }
 
+async function ensureAnnouncementColumns(sql: ReturnType<typeof neon>) {
+  await sql`ALTER TABLE announcements ADD COLUMN IF NOT EXISTS image_url TEXT`;
+  await sql`ALTER TABLE announcements ADD COLUMN IF NOT EXISTS table_headers JSONB NOT NULL DEFAULT '[]'::jsonb`;
+  await sql`ALTER TABLE announcements ADD COLUMN IF NOT EXISTS table_rows JSONB NOT NULL DEFAULT '[]'::jsonb`;
+  await sql`ALTER TABLE announcements ADD COLUMN IF NOT EXISTS theme TEXT NOT NULL DEFAULT 'neutral'`;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleCors(req, res)) return;
   const sql = neon(process.env.DATABASE_URL!);
 
   try {
     if (req.method === 'GET') {
+      if (req.query.include === 'all') {
+        const admin = await verifyAdmin(req);
+        if (!admin.ok) return res.status(401).json({ error: 'Unauthorized' });
+        const rows = await sql`SELECT * FROM announcements ORDER BY active DESC, importance ASC, created_at DESC`;
+        return res.json(rows);
+      }
       const rows = await sql`SELECT * FROM announcements WHERE active = true ORDER BY importance ASC, created_at DESC`;
       return res.json(rows);
     }
@@ -44,7 +57,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const allowedFacultyIds = admin.faculty_ids; // empty = unrestricted for non-super if role is admin
 
     if (req.method === 'POST') {
-      const { title, description, type, importance, date, faculty_id } = req.body;
+      await ensureAnnouncementColumns(sql);
+      const { title, description, type, importance, date, faculty_id, image_url, table_headers, table_rows, theme } = req.body;
       if (!title || !description || !type || !importance || !date) {
         return res.status(400).json({ error: 'All fields required' });
       }
@@ -53,12 +67,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!isSuperAdmin && allowedFacultyIds.length > 0 && fid && !allowedFacultyIds.includes(fid)) {
         return res.status(403).json({ error: 'Bu fakültə üçün icazəniz yoxdur' });
       }
-      const rows = await sql`INSERT INTO announcements (title, description, type, importance, date, faculty_id) VALUES (${title}, ${description}, ${type}, ${importance}, ${date}, ${fid}) RETURNING *`;
+      const headersJson = JSON.stringify(Array.isArray(table_headers) ? table_headers : []);
+      const rowsJson = JSON.stringify(Array.isArray(table_rows) ? table_rows : []);
+      const rows = await sql`INSERT INTO announcements (title, description, type, importance, date, faculty_id, image_url, table_headers, table_rows, theme)
+        VALUES (${title}, ${description}, ${type}, ${importance}, ${date}, ${fid}, ${image_url || null}, ${headersJson}::jsonb, ${rowsJson}::jsonb, ${theme || 'neutral'})
+        RETURNING *`;
       return res.status(201).json(rows[0]);
     }
 
     if (req.method === 'PUT') {
-      const { id, title, description, type, importance, date, active, faculty_id } = req.body;
+      await ensureAnnouncementColumns(sql);
+      const { id, title, description, type, importance, date, active, faculty_id, image_url, table_headers, table_rows, theme } = req.body;
       if (!id) return res.status(400).json({ error: 'ID required' });
       // Check ownership for faculty-scoped admins
       if (!isSuperAdmin && allowedFacultyIds.length > 0) {
@@ -68,7 +87,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
       const fid = faculty_id !== undefined ? (faculty_id ? Number(faculty_id) : null) : undefined;
-      const rows = await sql`UPDATE announcements SET title = COALESCE(${title}, title), description = COALESCE(${description}, description), type = COALESCE(${type}, type), importance = COALESCE(${importance}, importance), date = COALESCE(${date}, date), active = COALESCE(${active}, active), faculty_id = COALESCE(${fid !== undefined ? fid : null}, faculty_id), updated_at = NOW() WHERE id = ${id} RETURNING *`;
+      const hasImage = image_url !== undefined;
+      const hasHeaders = table_headers !== undefined;
+      const hasRows = table_rows !== undefined;
+      const hasTheme = theme !== undefined;
+      const headersJson = hasHeaders ? JSON.stringify(Array.isArray(table_headers) ? table_headers : []) : null;
+      const rowsJson = hasRows ? JSON.stringify(Array.isArray(table_rows) ? table_rows : []) : null;
+      const rows = await sql`UPDATE announcements SET
+        title = COALESCE(${title}, title),
+        description = COALESCE(${description}, description),
+        type = COALESCE(${type}, type),
+        importance = COALESCE(${importance}, importance),
+        date = COALESCE(${date}, date),
+        active = COALESCE(${active}, active),
+        faculty_id = CASE WHEN ${fid !== undefined} THEN ${fid ?? null} ELSE faculty_id END,
+        image_url = CASE WHEN ${hasImage} THEN ${image_url || null} ELSE image_url END,
+        table_headers = CASE WHEN ${hasHeaders} THEN ${headersJson}::jsonb ELSE table_headers END,
+        table_rows = CASE WHEN ${hasRows} THEN ${rowsJson}::jsonb ELSE table_rows END,
+        theme = CASE WHEN ${hasTheme} THEN ${theme || 'neutral'} ELSE theme END,
+        updated_at = NOW()
+        WHERE id = ${id} RETURNING *`;
       return res.json(rows[0]);
     }
 

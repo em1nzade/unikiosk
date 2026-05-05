@@ -29,6 +29,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     if (req.method === 'GET') {
+      if (req.query.include === 'all') {
+        if (!(await verifyAdmin(req))) return res.status(401).json({ error: 'Unauthorized' });
+        const rows = await sql`SELECT * FROM events ORDER BY active DESC, created_at DESC`;
+        return res.json(rows);
+      }
       const rows = await sql`SELECT * FROM events WHERE active = true ORDER BY created_at DESC`;
       return res.json(rows);
     }
@@ -47,7 +52,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'PUT') {
       const { id, ...fields } = req.body;
       if (!id) return res.status(400).json({ error: 'ID required' });
-      const rows = await sql`UPDATE events SET title = COALESCE(${fields.title ?? null}, title), description = COALESCE(${fields.description ?? null}, description), date = COALESCE(${fields.date ?? null}, date), time_slot = COALESCE(${fields.time_slot ?? null}, time_slot), location = COALESCE(${fields.location ?? null}, location), type = COALESCE(${fields.type ?? null}, type), image_url = COALESCE(${fields.image_url ?? null}, image_url), active = COALESCE(${fields.active ?? null}, active), updated_at = NOW() WHERE id = ${id} RETURNING *`;
+      const hasImage = fields.image_url !== undefined;
+      const rows = await sql`UPDATE events SET
+        title = COALESCE(${fields.title ?? null}, title),
+        description = COALESCE(${fields.description ?? null}, description),
+        date = COALESCE(${fields.date ?? null}, date),
+        time_slot = COALESCE(${fields.time_slot ?? null}, time_slot),
+        location = COALESCE(${fields.location ?? null}, location),
+        type = COALESCE(${fields.type ?? null}, type),
+        image_url = CASE WHEN ${hasImage} THEN ${fields.image_url || null} ELSE image_url END,
+        active = COALESCE(${fields.active ?? null}, active),
+        updated_at = NOW()
+        WHERE id = ${id} RETURNING *`;
       return res.json(rows[0]);
     }
 
