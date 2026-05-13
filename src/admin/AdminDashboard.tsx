@@ -294,6 +294,8 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [settings, setSettings] = useState<KioskSettings>({ ticker_enabled: true, ticker_mode: 'scroll', ticker_pinned_id: null, default_language: 'az', sleep_screen_enabled: false });
   const [loading, setLoading] = useState(true);
+  const [kioskSyncing, setKioskSyncing] = useState(false);
+  const [kioskSyncSent, setKioskSyncSent] = useState(false);
   const [killClicks, setKillClicks] = useState(0);
   const [showKillSwitch, setShowKillSwitch] = useState(false);
   const killTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -369,6 +371,18 @@ export default function AdminDashboard() {
 
   const terminateAllSessions = async () => {
     await adminFetch('/settings', token!, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ force_logout_at: new Date().toISOString() }) });
+  };
+
+  const requestKioskSync = async () => {
+    setKioskSyncing(true);
+    try {
+      const result = await adminFetch<{ sync_requested_at: string }>('/settings?action=sync-signal', token!, { method: 'POST', body: JSON.stringify({}) });
+      setSettings(prev => ({ ...prev, sync_requested_at: result.sync_requested_at }));
+      setKioskSyncSent(true);
+      setTimeout(() => setKioskSyncSent(false), 2500);
+    } finally {
+      setKioskSyncing(false);
+    }
   };
 
   const { active: activeAnnouncements } = splitActiveItems(announcements);
@@ -448,6 +462,15 @@ export default function AdminDashboard() {
       </aside>
 
       <main className="flex-1 p-8 overflow-y-auto">
+        {!loading && (
+          <div className="flex justify-end mb-5">
+            <button onClick={requestKioskSync} disabled={kioskSyncing}
+              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 disabled:opacity-50 shadow-sm">
+              {kioskSyncing ? <Loader2 size={18} className="animate-spin" /> : kioskSyncSent ? <Check size={18} /> : <RefreshCw size={18} />}
+              {kioskSyncSent ? 'Refresh göndərildi' : 'Kiosklara refresh göndər'}
+            </button>
+          </div>
+        )}
         {loading ? (
           <div className="flex items-center justify-center h-64"><Loader2 size={32} className="animate-spin text-uni-blue" /></div>
         ) : (
@@ -743,8 +766,6 @@ function SettingsManager({ settings, announcements, token, onRefresh }: { settin
 function AnnouncementsManager({ items, token, onRefresh, faculties, allowedFacultyIds }: { items: Announcement[]; token: string; onRefresh: () => void; faculties: Faculty[]; allowedFacultyIds: number[] }) {
   const [editing, setEditing] = useState<Partial<Announcement> | null>(null);
   const [saving, setSaving] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [syncSent, setSyncSent] = useState(false);
   const [types, setTypes] = useState<{ id: number; name: string }[]>([]);
   const { active, archived } = splitActiveItems(items);
 
@@ -785,15 +806,6 @@ function AnnouncementsManager({ items, token, onRefresh, faculties, allowedFacul
     onRefresh();
   };
 
-  const requestKioskSync = async () => {
-    setSyncing(true);
-    try {
-      await adminFetch('/settings?action=sync-signal', token, { method: 'POST', body: JSON.stringify({}) });
-      setSyncSent(true);
-      setTimeout(() => setSyncSent(false), 2500);
-    } finally { setSyncing(false); }
-  };
-
   // Faculty-scoped: show all items, but only allow editing own faculty's items
   const canEdit = (a: Announcement) =>
     allowedFacultyIds.length === 0 || !a.faculty_id || allowedFacultyIds.includes(a.faculty_id);
@@ -806,11 +818,6 @@ function AnnouncementsManager({ items, token, onRefresh, faculties, allowedFacul
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Elanlar</h2>
         <div className="flex items-center gap-3">
-          <button onClick={requestKioskSync} disabled={syncing}
-            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 disabled:opacity-50">
-            {syncing ? <Loader2 size={18} className="animate-spin" /> : syncSent ? <Check size={18} /> : <RefreshCw size={18} />}
-            {syncSent ? 'Göndərildi' : 'Kiosklara yenilə'}
-          </button>
           <button onClick={() => setEditing({ importance: 'low', theme: 'blue', type: types[0]?.name || '', date: new Date().toISOString().slice(0, 10), faculty_id: defaultFacultyId, table_headers: [], table_rows: [], image_url: null })}
             className="flex items-center gap-2 px-4 py-2.5 bg-uni-blue text-white rounded-xl font-medium hover:bg-blue-900">
             <Plus size={18} /> Yeni elan

@@ -23,6 +23,12 @@ async function verifyAdmin(req: VercelRequest): Promise<boolean> {
   } catch { return false; }
 }
 
+async function requestKioskSync(sql: ReturnType<typeof neon>) {
+  const syncRequestedAt = new Date().toISOString();
+  await sql`INSERT INTO kiosk_settings (key, value, updated_at) VALUES ('sync_requested_at', ${JSON.stringify(syncRequestedAt)}, NOW())
+    ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(syncRequestedAt)}, updated_at = NOW()`;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleCors(req, res)) return;
   const sql = neon(process.env.DATABASE_URL!);
@@ -45,7 +51,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!title || !description || !date || !time_slot || !location || !type) {
         return res.status(400).json({ error: 'All fields required' });
       }
-      const rows = await sql`INSERT INTO events (title, description, date, time_slot, location, type, image_url) VALUES (${title}, ${description}, ${date}, ${time_slot}, ${location}, ${type}, ${image_url || null}) RETURNING *`;
+      const rows = await sql`INSERT INTO events (title, description, date, time_slot, location, type, image_url, active)
+        VALUES (${title}, ${description}, ${date}, ${time_slot}, ${location}, ${type}, ${image_url || null}, true)
+        RETURNING *`;
+      await requestKioskSync(sql);
       return res.status(201).json(rows[0]);
     }
 
@@ -64,6 +73,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         active = COALESCE(${fields.active ?? null}, active),
         updated_at = NOW()
         WHERE id = ${id} RETURNING *`;
+      await requestKioskSync(sql);
       return res.json(rows[0]);
     }
 
@@ -71,6 +81,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { id } = req.body;
       if (!id) return res.status(400).json({ error: 'ID required' });
       await sql`DELETE FROM events WHERE id = ${id}`;
+      await requestKioskSync(sql);
       return res.json({ success: true });
     }
 

@@ -3,7 +3,7 @@ import type { KioskData } from './types';
 const CACHE_KEY = 'kiosk_data_cache';
 
 export const FULL_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
-export const SIGNAL_POLL_INTERVAL_MS = 15 * 60 * 1000;
+export const SIGNAL_POLL_INTERVAL_MS = 60 * 1000;
 
 export interface CachedKioskData {
   data: KioskData;

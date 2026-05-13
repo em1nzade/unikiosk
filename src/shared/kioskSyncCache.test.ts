@@ -33,7 +33,7 @@ const sampleData: KioskData = {
 };
 
 assert.equal(FULL_SYNC_INTERVAL_MS, 24 * 60 * 60 * 1000);
-assert.equal(SIGNAL_POLL_INTERVAL_MS, 15 * 60 * 1000);
+assert.equal(SIGNAL_POLL_INTERVAL_MS, 60 * 1000);
 
 storage.clear();
 saveCachedKioskData(localStorageMock, sampleData, 1_000, 'request-a');

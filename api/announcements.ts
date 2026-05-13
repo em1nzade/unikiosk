@@ -35,6 +35,12 @@ async function ensureAnnouncementColumns(sql: ReturnType<typeof neon>) {
   await sql`ALTER TABLE announcements ADD COLUMN IF NOT EXISTS theme TEXT NOT NULL DEFAULT 'neutral'`;
 }
 
+async function requestKioskSync(sql: ReturnType<typeof neon>) {
+  const syncRequestedAt = new Date().toISOString();
+  await sql`INSERT INTO kiosk_settings (key, value, updated_at) VALUES ('sync_requested_at', ${JSON.stringify(syncRequestedAt)}, NOW())
+    ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(syncRequestedAt)}, updated_at = NOW()`;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleCors(req, res)) return;
   const sql = neon(process.env.DATABASE_URL!);
@@ -69,9 +75,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       const headersJson = JSON.stringify(Array.isArray(table_headers) ? table_headers : []);
       const rowsJson = JSON.stringify(Array.isArray(table_rows) ? table_rows : []);
-      const rows = await sql`INSERT INTO announcements (title, description, type, importance, date, faculty_id, image_url, table_headers, table_rows, theme)
-        VALUES (${title}, ${description}, ${type}, ${importance}, ${date}, ${fid}, ${image_url || null}, ${headersJson}::jsonb, ${rowsJson}::jsonb, ${theme || 'neutral'})
+      const rows = await sql`INSERT INTO announcements (title, description, type, importance, date, faculty_id, image_url, table_headers, table_rows, theme, active)
+        VALUES (${title}, ${description}, ${type}, ${importance}, ${date}, ${fid}, ${image_url || null}, ${headersJson}::jsonb, ${rowsJson}::jsonb, ${theme || 'neutral'}, true)
         RETURNING *`;
+      await requestKioskSync(sql);
       return res.status(201).json(rows[0]);
     }
 
@@ -107,6 +114,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         theme = CASE WHEN ${hasTheme} THEN ${theme || 'neutral'} ELSE theme END,
         updated_at = NOW()
         WHERE id = ${id} RETURNING *`;
+      await requestKioskSync(sql);
       return res.json(rows[0]);
     }
 
@@ -120,6 +128,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
       await sql`DELETE FROM announcements WHERE id = ${id}`;
+      await requestKioskSync(sql);
       return res.json({ success: true });
     }
 
