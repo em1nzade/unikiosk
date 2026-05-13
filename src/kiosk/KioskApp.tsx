@@ -4,11 +4,13 @@ import QRCode from 'qrcode';
 import { 
   Map, CalendarDays, GraduationCap, Info, Clock, ChevronLeft, ChevronRight,
   Home, Search, ArrowRight, Bell, Coffee, Globe, Building2, BookOpen, Megaphone, FileText,
-  MapPin, MessageSquare, QrCode, Utensils, Salad, Cookie, CupSoda, Package
+  MapPin, MessageSquare, QrCode, Utensils, Salad, Cookie, CupSoda, Package, X, UserPlus
 } from 'lucide-react';
 import { useKioskData } from '../shared/useKioskData';
 import { useI18n, type Lang } from '../shared/i18n';
 import { buildFeedbackUrl } from '../shared/feedback';
+import { buildEventRegistrationUrl } from '../shared/eventRegistration';
+import { formatDisplayDate } from '../shared/dateFormat';
 import { normalizeAnnouncementTable, normalizeAnnouncementTheme, type AnnouncementTheme } from '../shared/announcementContent';
 import type { Announcement, Faculty, Schedule, ScheduleCell, Event as KioskEvent, CafeteriaCategory, InfoContent, KioskSettings } from '../shared/types';
 import campusMapImage from '../../ChatGPT Image Apr 29, 2026, 10_29_39 PM.png';
@@ -521,7 +523,7 @@ const FacultyBrowserView = ({ faculties, schedules }: { faculties: Faculty[]; sc
                 )}
                 <div className="p-8">
                   <h4 className="text-3xl font-bold text-gray-900 mb-3">{item.title}</h4>
-                  {item.description && <p className="text-xl text-gray-600 leading-relaxed">{item.description}</p>}
+                  {item.description && <p className="whitespace-pre-wrap text-left text-xl text-gray-600 leading-relaxed">{item.description}</p>}
                 </div>
               </motion.div>
             ))}
@@ -842,13 +844,30 @@ const MapView = () => {
 const EventsView = ({ events }: { events: KioskEvent[] }) => {
   const { t } = useI18n();
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
+  const [showRegistrationQr, setShowRegistrationQr] = useState(false);
+  const [registrationQrDataUrl, setRegistrationQrDataUrl] = useState('');
   const selectedEvent = events.find(ev => ev.id === selectedEventId);
+  const registrationUrl = selectedEvent ? buildEventRegistrationUrl(selectedEvent.id, window.location.href) : '';
+
+  useEffect(() => {
+    if (!showRegistrationQr || !selectedEvent) {
+      setRegistrationQrDataUrl('');
+      return;
+    }
+    let cancelled = false;
+    QRCode.toDataURL(registrationUrl, { width: 560, margin: 1, color: { dark: '#0A2540', light: '#FFFFFF' } })
+      .then(url => { if (!cancelled) setRegistrationQrDataUrl(url); })
+      .catch(() => { if (!cancelled) setRegistrationQrDataUrl(''); });
+    return () => { cancelled = true; };
+  }, [registrationUrl, selectedEvent, showRegistrationQr]);
 
   if (selectedEvent) {
+    const registrationEnabled = selectedEvent.registration_enabled !== false;
+
     return (
       <div className="flex-1 pt-40 pb-12 px-12 overflow-y-auto">
         <div className="max-w-6xl mx-auto">
-          <button onClick={() => setSelectedEventId(null)} className="flex items-center gap-3 text-xl font-bold text-uni-blue bg-white px-6 py-3 rounded-full shadow-sm mb-6 hover:bg-gray-50 transition-colors w-fit border border-gray-100">
+          <button onClick={() => { setShowRegistrationQr(false); setSelectedEventId(null); }} className="flex items-center gap-3 text-xl font-bold text-uni-blue bg-white px-6 py-3 rounded-full shadow-sm mb-6 hover:bg-gray-50 transition-colors w-fit border border-gray-100">
             <ChevronLeft size={24} /> {t('events.back') as string}
           </button>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-[3rem] shadow-xl overflow-hidden flex flex-col">
@@ -863,17 +882,19 @@ const EventsView = ({ events }: { events: KioskEvent[] }) => {
             <div className="p-12 flex flex-col lg:flex-row gap-12">
               <div className="flex-1">
                 <h3 className="text-3xl font-bold text-uni-blue mb-6 border-b border-gray-100 pb-4">{t('events.about') as string}</h3>
-                <p className="text-2xl text-gray-600 leading-relaxed font-light">{selectedEvent.description}</p>
-                <div className="mt-12 flex justify-start">
-                  <button className="bg-uni-blue text-white px-10 py-5 rounded-[2rem] text-2xl font-bold shadow-xl hover:bg-blue-900 transition-colors cursor-pointer w-full text-center">{t('events.register') as string}</button>
-                </div>
+                <p className="whitespace-pre-wrap text-left text-2xl text-gray-600 leading-relaxed font-light">{selectedEvent.description}</p>
+                {registrationEnabled && (
+                  <div className="mt-12 flex justify-start">
+                    <button onClick={() => setShowRegistrationQr(true)} className="bg-uni-blue text-white px-10 py-5 rounded-[2rem] text-2xl font-bold shadow-xl hover:bg-blue-900 transition-colors cursor-pointer w-full text-center">{t('events.register') as string}</button>
+                  </div>
+                )}
               </div>
               <div className="w-full lg:w-1/3 bg-gray-50 rounded-[2.5rem] p-8 border border-gray-100 h-fit">
                 <h4 className="text-2xl font-bold text-gray-900 mb-8 border-b border-gray-200 pb-4">{t('events.details') as string}</h4>
                 <div className="space-y-8">
                   <div className="flex items-start gap-5">
                     <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-uni-gold shadow-sm shrink-0"><CalendarDays size={32} /></div>
-                    <div><p className="text-sm text-gray-400 font-bold uppercase tracking-wider mb-1">{t('events.date') as string}</p><p className="text-xl font-bold text-gray-800">{selectedEvent.date}</p></div>
+                    <div><p className="text-sm text-gray-400 font-bold uppercase tracking-wider mb-1">{t('events.date') as string}</p><p className="text-xl font-bold text-gray-800">{formatDisplayDate(selectedEvent.date)}</p></div>
                   </div>
                   <div className="flex items-start gap-5">
                     <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-uni-gold shadow-sm shrink-0"><Clock size={32} /></div>
@@ -888,6 +909,46 @@ const EventsView = ({ events }: { events: KioskEvent[] }) => {
             </div>
           </motion.div>
         </div>
+        <AnimatePresence>
+          {showRegistrationQr && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-10 backdrop-blur-md"
+              onClick={() => setShowRegistrationQr(false)}>
+              <motion.div initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.96, opacity: 0 }}
+                className="w-full max-w-4xl rounded-[3rem] bg-white p-10 shadow-2xl"
+                onClick={event => event.stopPropagation()}>
+                <div className="mb-8 flex items-start justify-between gap-8">
+                  <div>
+                    <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-uni-blue text-white">
+                      <UserPlus size={34} />
+                    </div>
+                    <h3 className="text-4xl font-bold leading-tight text-uni-blue">Tədbir qeydiyyatı</h3>
+                    <p className="mt-3 max-w-2xl text-2xl leading-relaxed text-gray-600">QR kodu telefonla oxut, ad soyad və qrupunu yaz.</p>
+                  </div>
+                  <button onClick={() => setShowRegistrationQr(false)} className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200">
+                    <X size={30} />
+                  </button>
+                </div>
+                <div className="grid grid-cols-[1fr_360px] gap-10 items-center">
+                  <div>
+                    <p className="text-xl font-bold text-gray-500">{formatDisplayDate(selectedEvent.date)} · {selectedEvent.time_slot}</p>
+                    <p className="mt-3 text-3xl font-bold leading-tight text-gray-900">{selectedEvent.title}</p>
+                    <p className="mt-3 text-xl text-gray-500">{selectedEvent.location}</p>
+                  </div>
+                  <div className="rounded-[2rem] border border-gray-100 bg-gray-50 p-5">
+                    <div className="aspect-square rounded-[1.5rem] bg-white flex items-center justify-center overflow-hidden">
+                      {registrationQrDataUrl ? (
+                        <img src={registrationQrDataUrl} alt="Tədbir qeydiyyatı QR kodu" className="h-full w-full p-4" />
+                      ) : (
+                        <QrCode size={150} className="text-gray-300" />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
@@ -906,7 +967,7 @@ const EventsView = ({ events }: { events: KioskEvent[] }) => {
               <div className="absolute right-8 top-8 w-14 h-14 bg-gray-50 rounded-full flex items-center justify-center text-gray-400 group-hover:bg-uni-blue group-hover:text-white transition-colors"><ArrowRight size={28} /></div>
               <h3 className="text-4xl font-bold text-uni-blue mb-6 leading-tight pr-16">{event.title}</h3>
               <div className="mt-auto space-y-4 text-xl text-gray-600 font-medium">
-                <div className="flex items-center gap-4"><CalendarDays size={28} className="text-uni-gold" /><span>{event.date} &bull; {event.time_slot}</span></div>
+                <div className="flex items-center gap-4"><CalendarDays size={28} className="text-uni-gold" /><span>{formatDisplayDate(event.date)} &bull; {event.time_slot}</span></div>
                 <div className="flex items-center gap-4"><Map size={28} className="text-gray-400" /><span>{event.location}</span></div>
               </div>
             </div>
@@ -1050,10 +1111,10 @@ const AnnouncementsView = ({ announcements }: { announcements: Announcement[] })
                 <div className="flex-1">
                 <div className="flex items-center gap-4 mb-3">
                   <span className={`px-4 py-1.5 rounded-full text-sm font-bold uppercase tracking-wider ${colors.tagBg} ${colors.tagText}`}>{ann.type}</span>
-                  <span className="text-xl font-medium text-gray-500">{ann.date}</span>
+                  <span className="text-xl font-medium text-gray-500">{formatDisplayDate(ann.date)}</span>
                 </div>
                 <h3 className={`text-4xl font-bold mb-3 ${colors.titleText}`}>{ann.title}</h3>
-                <p className="text-2xl text-gray-700 leading-relaxed max-w-4xl">{ann.description}</p>
+                <p className="whitespace-pre-wrap text-left text-2xl text-gray-700 leading-relaxed max-w-4xl">{ann.description}</p>
                 </div>
                 {ann.image_url && (
                   <img src={ann.image_url} alt={ann.title} className="w-64 max-h-44 rounded-3xl object-contain bg-white/70 border border-white/70" referrerPolicy="no-referrer" />

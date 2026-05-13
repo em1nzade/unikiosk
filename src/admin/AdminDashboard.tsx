@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import { adminFetch, apiFetch } from '../shared/api';
 import { normalizeAnnouncementTable, splitActiveItems, normalizeAnnouncementTheme, type AnnouncementTheme } from '../shared/announcementContent';
-import type { Announcement, Faculty, Department, DeptContent, Event as KioskEvent, CafeteriaCategory, InfoContent, KioskSettings, Schedule, ScheduleCell, FeedbackMessage } from '../shared/types';
+import { formatDisplayDate, toDateInputValue } from '../shared/dateFormat';
+import type { Announcement, Faculty, Department, DeptContent, Event as KioskEvent, EventRegistration, CafeteriaCategory, InfoContent, KioskSettings, Schedule, ScheduleCell, FeedbackMessage } from '../shared/types';
 import {
   LogOut, Bell, Clock, CalendarDays, Coffee, Info, Plus, Trash2, Edit3, Save, X, ChevronRight, ChevronLeft,
   GraduationCap, LayoutDashboard, Loader2, Users, Shield, ShieldCheck, Settings, Check, ChevronDown, Monitor, Table2,
-  MessageSquare, RefreshCw, Archive, RotateCcw, ImagePlus
+  MessageSquare, RefreshCw, Archive, RotateCcw, ImagePlus, QrCode, ClipboardList
 } from 'lucide-react';
 
 const ANNOUNCEMENT_THEME_OPTIONS: { value: AnnouncementTheme; label: string; chip: string }[] = [
@@ -276,7 +277,7 @@ function TextArea({ label, value, onChange, rows = 3, placeholder }: { label: st
     <div>
       <label className="text-sm font-medium text-gray-700 mb-1 block">{label}</label>
       <textarea value={value} onChange={e => onChange(e.target.value)} rows={rows} placeholder={placeholder}
-        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:border-uni-blue transition-colors resize-none" />
+        className="w-full whitespace-pre-wrap text-left px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:border-uni-blue transition-colors resize-none" />
     </div>
   );
 }
@@ -520,7 +521,7 @@ function DashboardView({ announcements, faculties, events, feedback, onNavigate 
             <div key={a.id} className="flex items-center gap-4 p-3 rounded-xl hover:bg-gray-50">
               <div className={"w-3 h-3 rounded-full " + (a.importance === 'high' ? 'bg-red-500' : a.importance === 'medium' ? 'bg-amber-500' : 'bg-gray-400')} />
               <span className="font-medium text-gray-800 flex-1">{a.title}</span>
-              <span className="text-sm text-gray-400">{a.date}</span>
+              <span className="text-sm text-gray-400">{formatDisplayDate(a.date)}</span>
             </div>
           ))}
         </div>
@@ -859,7 +860,7 @@ function AnnouncementsManager({ items, token, onRefresh, faculties, allowedFacul
                     {theme && <span className={"px-3 py-1 rounded-full text-xs font-bold border " + theme.chip}>{theme.label}</span>}
                   </div>
                 </td>
-                <td className="px-6 py-4 text-gray-500">{a.date}</td>
+                <td className="px-6 py-4 text-gray-500">{formatDisplayDate(a.date)}</td>
                 <td className="px-6 py-4 flex gap-2 justify-end">
                   <button onClick={() => editable && setEditing(a)} disabled={!editable} className={"p-2 " + (editable ? "text-gray-400 hover:text-uni-blue" : "text-gray-200 cursor-not-allowed")}><Edit3 size={18} /></button>
                   <button onClick={() => editable && updateActive(a.id, false)} disabled={!editable} className={"p-2 " + (editable ? "text-gray-400 hover:text-amber-600" : "text-gray-200 cursor-not-allowed")} title="Arxivlə"><Archive size={18} /></button>
@@ -875,7 +876,7 @@ function AnnouncementsManager({ items, token, onRefresh, faculties, allowedFacul
         emptyText="Arxivdə elan yoxdur"
         count={archived.length}
         items={archived}
-        renderMeta={item => item.date}
+        renderMeta={item => formatDisplayDate(item.date)}
         canEdit={canEdit}
         onRestore={id => updateActive(id, true)}
         onDelete={remove}
@@ -896,7 +897,7 @@ function AnnouncementsManager({ items, token, onRefresh, faculties, allowedFacul
             options={[{ value: 'high', label: 'Yüksək' }, { value: 'medium', label: 'Orta' }, { value: 'low', label: 'Aşağı' }]} />
           <Select label="Rəng" value={normalizeAnnouncementTheme(editing.theme)} onChange={v => setEditing({ ...editing, theme: normalizeAnnouncementTheme(v) })}
             options={ANNOUNCEMENT_THEME_OPTIONS.map(option => ({ value: option.value, label: option.label }))} />
-          <Input label="Tarix" value={editing.date || ''} onChange={v => setEditing({ ...editing, date: v })} type="date" />
+          <Input label="Tarix" value={toDateInputValue(editing.date)} onChange={v => setEditing({ ...editing, date: v })} type="date" />
           {/* Faculty selector: hidden for single-faculty admins, visible for superadmin */}
           {(allowedFacultyIds.length !== 1) && (
             <div>
@@ -1391,6 +1392,7 @@ function FacultyManager({ faculties, token, onRefresh }: { faculties: Faculty[];
 // ─── Events Manager ─────────────────────────────────────
 function EventsManager({ items, token, onRefresh }: { items: KioskEvent[]; token: string; onRefresh: () => void }) {
   const [editing, setEditing] = useState<Partial<KioskEvent> | null>(null);
+  const [registrationViewer, setRegistrationViewer] = useState<{ event: KioskEvent; rows: EventRegistration[]; loading: boolean; error: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [types, setTypes] = useState<{ id: number; name: string }[]>([]);
   const { active, archived } = splitActiveItems(items);
@@ -1424,11 +1426,21 @@ function EventsManager({ items, token, onRefresh }: { items: KioskEvent[]; token
     onRefresh();
   };
 
+  const openRegistrations = async (event: KioskEvent) => {
+    setRegistrationViewer({ event, rows: [], loading: true, error: '' });
+    try {
+      const rows = await adminFetch<EventRegistration[]>(`/event-registrations?event_id=${event.id}`, token);
+      setRegistrationViewer(current => current?.event.id === event.id ? { ...current, rows, loading: false } : current);
+    } catch (err: any) {
+      setRegistrationViewer(current => current?.event.id === event.id ? { ...current, loading: false, error: err.message || 'Qeydiyyatlar yüklənmədi' } : current);
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Tədbirlər</h2>
-        <button onClick={() => setEditing({ type: types[0]?.name || '', date: new Date().toISOString().slice(0, 10), image_url: null })}
+        <button onClick={() => setEditing({ type: types[0]?.name || '', date: new Date().toISOString().slice(0, 10), image_url: null, registration_enabled: true })}
           className="flex items-center gap-2 px-4 py-2.5 bg-uni-blue text-white rounded-xl font-medium hover:bg-blue-900"><Plus size={18} /> Yeni tədbir</button>
       </div>
       <div className="grid grid-cols-2 gap-6">
@@ -1436,11 +1448,15 @@ function EventsManager({ items, token, onRefresh }: { items: KioskEvent[]; token
           <div key={ev.id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
             {ev.image_url && <img src={ev.image_url} alt={ev.title} className="w-full h-48 object-cover" referrerPolicy="no-referrer" />}
             <div className="p-6">
-              <div className="flex items-center gap-2 mb-2"><span className="text-xs font-bold uppercase tracking-wider bg-gray-100 px-3 py-1 rounded-full text-gray-600">{ev.type}</span></div>
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider bg-gray-100 px-3 py-1 rounded-full text-gray-600">{ev.type}</span>
+                {ev.registration_enabled !== false && <span className="text-xs font-bold bg-emerald-50 px-3 py-1 rounded-full text-emerald-700">Qeydiyyat açıq</span>}
+              </div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">{ev.title}</h3>
-              <p className="text-sm text-gray-500 mb-4">{ev.date} &bull; {ev.time_slot} &bull; {ev.location}</p>
-              <div className="flex gap-2">
+              <p className="text-sm text-gray-500 mb-4">{formatDisplayDate(ev.date)} &bull; {ev.time_slot} &bull; {ev.location}</p>
+              <div className="flex flex-wrap gap-2">
                 <button onClick={() => setEditing(ev)} className="flex-1 px-4 py-2 text-sm font-medium text-uni-blue bg-blue-50 rounded-xl hover:bg-blue-100 flex items-center justify-center gap-1"><Edit3 size={14} /> Redaktə</button>
+                <button onClick={() => openRegistrations(ev)} className="flex-1 px-4 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 rounded-xl hover:bg-emerald-100 flex items-center justify-center gap-1"><ClipboardList size={14} /> İştirakçılar ({ev.registration_count ?? 0})</button>
                 <button onClick={() => updateActive(ev.id, false)} className="px-4 py-2 text-sm font-medium text-amber-600 bg-amber-50 rounded-xl hover:bg-amber-100 flex items-center gap-1"><Archive size={14} /> Arxiv</button>
               </div>
             </div>
@@ -1452,21 +1468,77 @@ function EventsManager({ items, token, onRefresh }: { items: KioskEvent[]; token
         emptyText="Arxivdə tədbir yoxdur"
         count={archived.length}
         items={archived}
-        renderMeta={item => `${item.date} · ${item.location}`}
+        renderMeta={item => `${formatDisplayDate(item.date)} · ${item.location}`}
         onRestore={id => updateActive(id, true)}
         onDelete={remove}
       />
       {editing && (
         <FormModal title={editing.id ? 'Tədbiri redaktə et' : 'Yeni tədbir'} onClose={() => setEditing(null)} onSave={save} saving={saving}>
           <Input label="Başlıq" value={editing.title || ''} onChange={v => setEditing({ ...editing, title: v })} />
-          <TextArea label="Təsvir" value={editing.description || ''} onChange={v => setEditing({ ...editing, description: v })} />
-          <Input label="Tarix" value={editing.date || ''} onChange={v => setEditing({ ...editing, date: v })} type="date" />
+          <TextArea label="Təsvir" value={editing.description || ''} onChange={v => setEditing({ ...editing, description: v })} rows={7} />
+          <Input label="Tarix" value={toDateInputValue(editing.date)} onChange={v => setEditing({ ...editing, date: v })} type="date" />
           <Input label="Saat" value={editing.time_slot || ''} onChange={v => setEditing({ ...editing, time_slot: v })} placeholder="10:00 - 18:00" />
           <Input label="Məkan" value={editing.location || ''} onChange={v => setEditing({ ...editing, location: v })} />
           <CreatableSelect label="Tip" value={editing.type || ''} onChange={v => setEditing({ ...editing, type: v })}
             options={types} onCreateOption={createType} />
+          <label className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 px-4 py-3">
+            <span>
+              <span className="flex items-center gap-2 text-sm font-bold text-gray-800"><QrCode size={16} /> Qeydiyyat düyməsi</span>
+              <span className="mt-1 block text-sm text-gray-500">Açıq olanda kioskda QR qeydiyyat düyməsi görünəcək.</span>
+            </span>
+            <input
+              type="checkbox"
+              checked={editing.registration_enabled !== false}
+              onChange={event => setEditing({ ...editing, registration_enabled: event.target.checked })}
+              className="h-5 w-5 accent-uni-blue"
+            />
+          </label>
           <ImageUploadField label="Şəkil" value={editing.image_url || ''} onChange={v => setEditing({ ...editing, image_url: v })} />
         </FormModal>
+      )}
+      {registrationViewer && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setRegistrationViewer(null)}>
+          <div className="bg-white rounded-2xl p-8 max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={event => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-6 mb-6">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">İştirakçılar</h3>
+                <p className="mt-1 text-sm text-gray-500">{registrationViewer.event.title}</p>
+              </div>
+              <button onClick={() => setRegistrationViewer(null)} className="text-gray-400 hover:text-gray-600"><X size={24} /></button>
+            </div>
+            {registrationViewer.loading ? (
+              <div className="flex h-40 items-center justify-center"><Loader2 size={28} className="animate-spin text-uni-blue" /></div>
+            ) : registrationViewer.error ? (
+              <p className="rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{registrationViewer.error}</p>
+            ) : registrationViewer.rows.length === 0 ? (
+              <div className="rounded-2xl border border-gray-100 bg-gray-50 py-12 text-center text-gray-400">
+                <ClipboardList size={42} className="mx-auto mb-3 opacity-60" />
+                <p className="font-medium">Hələ qeydiyyatdan keçən yoxdur</p>
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-2xl border border-gray-100">
+                <table className="w-full">
+                  <thead className="bg-gray-50 text-left text-sm font-medium text-gray-500">
+                    <tr>
+                      <th className="px-5 py-3">Ad Soyad</th>
+                      <th className="px-5 py-3">Qrup</th>
+                      <th className="px-5 py-3">Vaxt</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {registrationViewer.rows.map(row => (
+                      <tr key={row.id}>
+                        <td className="px-5 py-4 font-medium text-gray-900">{row.full_name}</td>
+                        <td className="px-5 py-4 text-gray-600">{row.group_name}</td>
+                        <td className="px-5 py-4 text-sm text-gray-500">{new Date(row.created_at).toLocaleString('az-AZ')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

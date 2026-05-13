@@ -5,6 +5,7 @@ import { I18nProvider } from './shared/i18n';
 import LoginPage from './admin/LoginPage';
 import AdminDashboard from './admin/AdminDashboard';
 import FeedbackPage from './feedback/FeedbackPage';
+import EventRegistrationPage from './events/EventRegistrationPage';
 
 function AdminRoute() {
   const { token } = useAuth();
@@ -18,6 +19,7 @@ export default function App() {
       <Routes>
         <Route path="/admin/*" element={<AuthProvider><AdminRoute /></AuthProvider>} />
         <Route path="/feedback" element={<FeedbackPage />} />
+        <Route path="/events/:eventId/register" element={<EventRegistrationPage />} />
         <Route path="*" element={<I18nProvider><KioskApp /></I18nProvider>} />
       </Routes>
     </BrowserRouter>

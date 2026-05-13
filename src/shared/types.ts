@@ -53,6 +53,18 @@ export interface Event {
   type: string;
   image_url: string | null;
   active: boolean;
+  registration_enabled?: boolean;
+  registration_count?: number;
+}
+
+export interface EventRegistration {
+  id: number;
+  event_id: number;
+  event_title?: string;
+  full_name: string;
+  group_name: string;
+  user_agent: string | null;
+  created_at: string;
 }
 
 export interface CafeteriaCategory {
