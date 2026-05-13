@@ -38,7 +38,7 @@ export default function EventRegistrationPage() {
     setError('');
     setSaving(true);
     try {
-      await apiFetch('/event-registrations', {
+      await apiFetch('/events?action=register', {
         method: 'POST',
         body: JSON.stringify({ event_id: event.id, full_name: fullName, group_name: groupName }),
       });

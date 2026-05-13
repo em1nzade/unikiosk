@@ -1429,7 +1429,7 @@ function EventsManager({ items, token, onRefresh }: { items: KioskEvent[]; token
   const openRegistrations = async (event: KioskEvent) => {
     setRegistrationViewer({ event, rows: [], loading: true, error: '' });
     try {
-      const rows = await adminFetch<EventRegistration[]>(`/event-registrations?event_id=${event.id}`, token);
+      const rows = await adminFetch<EventRegistration[]>(`/events?action=registrations&event_id=${event.id}`, token);
       setRegistrationViewer(current => current?.event.id === event.id ? { ...current, rows, loading: false } : current);
     } catch (err: any) {
       setRegistrationViewer(current => current?.event.id === event.id ? { ...current, loading: false, error: err.message || 'Qeydiyyatlar yüklənmədi' } : current);
