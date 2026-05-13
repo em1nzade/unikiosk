@@ -42,3 +42,8 @@ export function isRemoteSyncRequested(remoteSyncRequestedAt: string | null | und
   if (!remoteSyncRequestedAt) return false;
   return remoteSyncRequestedAt !== cachedSyncRequestedAt;
 }
+
+export function getKioskSyncEtagHeader(force: boolean, etag: string | null | undefined) {
+  if (force || !etag) return undefined;
+  return etag;
+}

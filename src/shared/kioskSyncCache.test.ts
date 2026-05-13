@@ -5,6 +5,7 @@ import {
   getCachedKioskData,
   isFullSyncDue,
   isRemoteSyncRequested,
+  getKioskSyncEtagHeader,
   saveCachedKioskData,
 } from './kioskSyncCache';
 import type { KioskData } from './types';
@@ -50,6 +51,10 @@ assert.equal(isFullSyncDue({ data: sampleData, syncedAt: 1_000, syncRequestedAt:
 assert.equal(isRemoteSyncRequested('request-b', 'request-a'), true);
 assert.equal(isRemoteSyncRequested('request-a', 'request-a'), false);
 assert.equal(isRemoteSyncRequested(null, 'request-a'), false);
+
+assert.equal(getKioskSyncEtagHeader(false, 'etag-a'), 'etag-a');
+assert.equal(getKioskSyncEtagHeader(false, ''), undefined);
+assert.equal(getKioskSyncEtagHeader(true, 'etag-a'), undefined);
 
 storage.set('kiosk_data_cache', '{bad json');
 assert.equal(getCachedKioskData(localStorageMock), null);

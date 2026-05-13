@@ -5,6 +5,7 @@ import {
   FULL_SYNC_INTERVAL_MS,
   SIGNAL_POLL_INTERVAL_MS,
   getCachedKioskData,
+  getKioskSyncEtagHeader,
   isFullSyncDue,
   isRemoteSyncRequested,
   saveCachedKioskData,
@@ -58,7 +59,8 @@ export function useKioskData() {
 
     try {
       const headers: Record<string, string> = {};
-      if (etagRef.current) headers['If-None-Match'] = etagRef.current;
+      const etagHeader = getKioskSyncEtagHeader(force, etagRef.current);
+      if (etagHeader) headers['If-None-Match'] = etagHeader;
       const params = deviceIdRef.current ? `?device=${deviceIdRef.current}` : '';
       const res = await fetch(`${BASE_URL}/api/sync${params}`, { headers });
       if (res.status === 304) {

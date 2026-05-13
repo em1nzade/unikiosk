@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { neon } from '@neondatabase/serverless';
+import { createSyncEtag } from './sync-etag';
 
 const DEFAULT_CAFETERIA_MENU = [
   {
@@ -164,8 +165,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       settings,
     };
 
-    // Compute ETag from actual data so ANY change is detected
-    const etag = Buffer.from(JSON.stringify(result_data)).toString('base64url').slice(0, 32);
+    // Compute ETag from the full payload so changes after the JSON prefix are detected.
+    const etag = createSyncEtag(result_data);
     result_data.etag = etag;
 
     const clientEtag = req.headers['if-none-match'];
