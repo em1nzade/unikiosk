@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { neon } from '@neondatabase/serverless';
-import { createSyncEtag } from './sync-etag';
+import { createSyncEtag } from './sync-etag.js';
 
 const DEFAULT_CAFETERIA_MENU = [
   {

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createSyncEtag } from './sync-etag';
+import { createSyncEtag } from './sync-etag.js';
 
 const baseData = {
   announcements: [{ id: 2, title: 'ELAN' }],
