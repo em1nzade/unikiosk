@@ -1,4 +1,4 @@
-const DEFAULT_PUBLIC_URL = 'https://unikiosk.vercel.app';
+const DEFAULT_PUBLIC_URL = 'https://oyu-feedback.vercel.app';
 
 function getConfiguredRegistrationBaseUrl(): string {
   const metaEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
@@ -11,7 +11,7 @@ export function buildEventRegistrationUrl(eventId: number, originOrHref: string)
   try {
     const currentUrl = new URL(originOrHref);
     const isUsableOrigin = currentUrl.origin !== 'null' && ['http:', 'https:'].includes(currentUrl.protocol);
-    if (isUsableOrigin && (currentUrl.hostname === 'localhost' || currentUrl.hostname.endsWith('.vercel.app'))) {
+    if (isUsableOrigin && currentUrl.hostname === 'localhost') {
       baseUrl = currentUrl.origin;
     }
   } catch {
