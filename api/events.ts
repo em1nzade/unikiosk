@@ -94,7 +94,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'POST' && req.query.action === 'register') {
-      const { eventId, fullName, groupName } = validateRegistrationInput(req.body);
+      let registrationInput: ReturnType<typeof validateRegistrationInput>;
+      try {
+        registrationInput = validateRegistrationInput(req.body);
+      } catch (err: any) {
+        return res.status(400).json({ error: err.message || 'Qeydiyyat məlumatları düzgün deyil' });
+      }
+
+      const { eventId, fullName, groupName } = registrationInput;
       const events = await sql`SELECT id, title, active, registration_enabled FROM events WHERE id = ${eventId} LIMIT 1`;
       const event = events[0];
       if (!event || event.active === false) return res.status(404).json({ error: 'Tədbir tapılmadı' });
