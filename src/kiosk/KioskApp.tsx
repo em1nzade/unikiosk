@@ -871,15 +871,14 @@ const EventsView = ({ events }: { events: KioskEvent[] }) => {
             <ChevronLeft size={24} /> {t('events.back') as string}
           </button>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-[3rem] shadow-xl overflow-hidden flex flex-col">
-            <div className="w-full h-96 relative">
+            <div className="w-full h-96 overflow-hidden">
               <img src={selectedEvent.image_url || 'https://picsum.photos/seed/event/800/600'} alt={selectedEvent.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"></div>
-              <div className="absolute bottom-10 left-12 pr-12">
-                <span className="bg-uni-gold text-white px-5 py-2 rounded-full font-bold tracking-wider uppercase text-sm mb-4 inline-block shadow-md">{selectedEvent.type}</span>
-                <h2 className="text-5xl font-bold text-white text-shadow-lg">{selectedEvent.title}</h2>
-              </div>
             </div>
-            <div className="p-12 flex flex-col lg:flex-row gap-12">
+            <div className="px-12 pt-10">
+              <span className="bg-uni-gold text-white px-5 py-2 rounded-full font-bold tracking-wider uppercase text-sm mb-4 inline-block shadow-md">{selectedEvent.type}</span>
+              <h2 className="text-5xl font-bold leading-tight text-uni-blue">{selectedEvent.title}</h2>
+            </div>
+            <div className="p-12 pt-8 flex flex-col lg:flex-row gap-12">
               <div className="flex-1">
                 <h3 className="text-3xl font-bold text-uni-blue mb-6 border-b border-gray-100 pb-4">{t('events.about') as string}</h3>
                 <p className="whitespace-pre-wrap text-left text-2xl text-gray-600 leading-relaxed font-light">{selectedEvent.description}</p>
